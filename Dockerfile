@@ -21,4 +21,7 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 EXPOSE 3000
 
+# Create data directory for persistent waitlist storage
+RUN mkdir -p /app/data
+
 CMD ["node", "http-server.cjs"]

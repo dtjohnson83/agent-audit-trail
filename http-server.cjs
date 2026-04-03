@@ -7,12 +7,29 @@
 
 const http = require("http");
 const url = require("url");
+const fs = require("fs");
+const path = require("path");
 const { randomUUID } = require("crypto");
 
 // ============================================================
 // In-memory log store + policy engine (from the MCP server)
 // ============================================================
 const logs = [];
+
+const WAITLIST_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "waitlist.json");
+
+function readWaitlist() {
+  try {
+    if (!fs.existsSync(WAITLIST_FILE)) return [];
+    return JSON.parse(fs.readFileSync(WAITLIST_FILE, "utf8"));
+  } catch { return []; }
+}
+
+function writeWaitlist(emails) {
+  const dir = path.dirname(WAITLIST_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(WAITLIST_FILE, JSON.stringify(emails, null, 2));
+}
 
 function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
   const violations = [];
@@ -191,6 +208,47 @@ const server = http.createServer(async (req, res) => {
         error: { code: -32603, message: err.message },
       }));
     }
+    return;
+  }
+
+  // Waitlist POST — add an email
+  if (parsedUrl.pathname === "/waitlist" && req.method === "POST") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const body = Buffer.concat(chunks).toString();
+    let email;
+    try {
+      ({ email } = JSON.parse(body));
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid email" }));
+      return;
+    }
+    const normalized = email.toLowerCase().trim();
+    const emails = readWaitlist();
+    if (emails.includes(normalized)) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, duplicate: true }));
+      return;
+    }
+    emails.push(normalized);
+    writeWaitlist(emails);
+    console.error(`[waitlist] New signup: ${normalized} (total: ${emails.length})`);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true }));
+    return;
+  }
+
+  // Waitlist GET — return count
+  if (parsedUrl.pathname === "/waitlist" && req.method === "GET") {
+    const emails = readWaitlist();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ count: emails.length }));
     return;
   }
 
