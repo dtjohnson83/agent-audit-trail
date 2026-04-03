@@ -186,3 +186,19 @@ const PORT = Number(process.env.PORT) || 3000;
 server.listen(PORT, "0.0.0.0", () => console.log(`Running on port ${PORT}`));
 
 module.exports = server;
+
+// Startup diagnostics (Vercel will capture this)
+if (typeof process !== 'undefined') {
+  process.on('uncaughtException', (err) => {
+    try {
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/startup-error.log', `${new Date().toISOString()} uncaughtException: ${err.message}\n${err.stack}\n`);
+    } catch(e) {}
+  });
+  process.on('unhandledRejection', (reason) => {
+    try {
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/startup-error.log', `${new Date().toISOString()} unhandledRejection: ${reason}\n`);
+    } catch(e) {}
+  });
+}
