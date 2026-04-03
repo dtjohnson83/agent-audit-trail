@@ -3,7 +3,7 @@
  * Uses MCP SDK StreamableHTTPServerTransport for Smithery HTTP endpoint
  */
 import { createServer } from "http";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamable-http.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/dist/esm/server/streamableHttp.js";
 import { createSandboxServer } from "./dist/index.js";
 
 const PORT = parseInt(process.env.PORT || "3000", 10);

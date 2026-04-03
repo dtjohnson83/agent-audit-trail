@@ -10,11 +10,12 @@ COPY tsconfig.server.json ./
 COPY src ./src
 RUN npm run build:mcp
 
-# Remove devDeps from production image
-RUN npm prune --omit=dev
+# Remove devDeps only (keep all production deps including MCP SDK)
+RUN npm prune --omit=dev || true
 
-# Copy server entry point
+# Copy server entry point and smithery files
 COPY http-server.js ./http-server.js
+COPY .smithery ./dist/smithery-http
 
 ENV AUDIT_DATA_DIR=/app/data
 ENV PORT=3000
