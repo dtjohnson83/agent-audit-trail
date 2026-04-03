@@ -149,8 +149,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // MCP POST endpoint
-  if (req.method === "POST") {
+  // MCP POST endpoint (only for /mcp path)
+  if (parsedUrl.pathname === "/mcp" && req.method === "POST") {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
     const body = Buffer.concat(chunks).toString();
@@ -252,7 +252,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // GET on /mcp — Smithery health check
+  // GET on /mcp — Smithery health check (also MCP protocol GET)
   if (parsedUrl.pathname === "/mcp" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(JSON.stringify({
