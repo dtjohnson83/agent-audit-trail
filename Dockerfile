@@ -1,13 +1,19 @@
 FROM node:20-alpine
 WORKDIR /app
 
+# Install ALL deps (including devDeps for TypeScript)
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci
 
+# Build the MCP server TypeScript
 COPY tsconfig.server.json ./
 COPY src ./src
 RUN npm run build:mcp
 
+# Remove devDeps for smaller production image
+RUN npm prune --omit=dev
+
+# Copy HTTP server entry point
 COPY http-server.cjs ./http-server.cjs
 
 ENV AUDIT_DATA_DIR=/app/data
