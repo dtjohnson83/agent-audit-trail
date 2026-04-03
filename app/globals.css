@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+::selection { background: rgba(255,255,255,0.15); }
+html { scroll-behavior: smooth; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes lineGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }

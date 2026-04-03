@@ -1,4 +1,4 @@
-// File: /Users/danzusholdingsllc/agent-audit-trail/app/page.tsx
+// File: /Users/danzusholdingsllc/clawd/agent-audit-trail/app/page.tsx
 import * as entry from '../../../app/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
