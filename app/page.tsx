@@ -186,7 +186,17 @@ function StatNum({ num, label }: { num: string; label: string }) {
 export default function Landing() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const handleSubmit = () => { if (email.includes("@")) setSubmitted(true); };
+  const handleSubmit = async () => {
+    if (!email.includes("@")) return;
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) setSubmitted(true);
+    } catch {}
+  };
 
   const sec: React.CSSProperties = { padding: "clamp(40px, 8vw, 80px) 0" };
   const lbl: React.CSSProperties = { fontSize: 11, color: "#404040", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 500, marginBottom: "clamp(16px, 3vw, 28px)" };
