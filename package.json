@@ -8,9 +8,10 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.server.json",
-    "start": "node server.js",
-    "dev": "node server.js"
+    "build": "next build",
+    "start": "next start",
+    "dev": "next dev",
+    "build:mcp": "tsc -p tsconfig.server.json"
   },
   "keywords": [
     "mcp",
