@@ -1,0 +1,71 @@
+{
+  "payload": {
+    "type": "hosted",
+    "stateful": false,
+    "hasAuthAdapter": false,
+    "serverCard": {
+      "serverInfo": {
+        "name": "agent-audit-trail",
+        "version": "1.0.0"
+      },
+      "tools": [
+        {
+          "name": "log_action",
+          "description": "Log an agent action to the immutable audit trail",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "agent_name": {
+                "type": "string"
+              },
+              "agent_id": {
+                "type": "string"
+              },
+              "tool_name": {
+                "type": "string"
+              },
+              "tool_action": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              },
+              "data_fields_accessed": {
+                "type": "string"
+              },
+              "metadata": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "agent_name",
+              "tool_name"
+            ],
+            "$schema": "http://json-schema.org/draft-07/schema#"
+          },
+          "execution": {
+            "taskSupport": "forbidden"
+          }
+        }
+      ],
+      "resources": [],
+      "prompts": []
+    },
+    "source": {
+      "commit": "5803c732f4154d62fa5051ed7162a70deee1cf8a",
+      "branch": "main"
+    }
+  },
+  "artifacts": {
+    "module": "module.js",
+    "sourcemap": "module.js.map"
+  }
+}

@@ -518,6 +518,66 @@ server.resource(
 );
 
 // ============================================================
+// SANDBOX SERVER (for Smithery v4 scanning)
+// ============================================================
+export function createSandboxServer() {
+  const sandboxLogStore = new LogStore(undefined);
+  const sandboxPolicyEngine = new PolicyEngine();
+  const sandboxServer = new McpServer({
+    name: "agent-audit-trail",
+    version: "1.0.0",
+  });
+
+  // Re-register all tools on the sandbox server
+  sandboxServer.tool(
+    "log_action",
+    "Log an agent action to the immutable audit trail",
+    {
+      agent_name: z.string(),
+      agent_id: z.string().optional(),
+      tool_name: z.string(),
+      tool_action: z.string().optional(),
+      parameters: z.record(z.string(), z.any()).optional(),
+      data_fields_accessed: z.string().optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
+    },
+    async (args) => {
+      const dataFields = (args.data_fields_accessed || "").split(",").map((s) => s.trim()).filter(Boolean);
+      const result = sandboxLogStore.writeLog({
+        agent_id: args.agent_id || "sandbox-agent",
+        agent_name: args.agent_name,
+        tool_name: args.tool_name,
+        tool_action: args.tool_action || "unknown",
+        parameters: args.parameters || {},
+        response_summary: "sandbox log entry",
+        response_status: "success",
+        data_fields_accessed: dataFields,
+        execution_duration_ms: 0,
+        token_cost_estimate: null,
+        policy_violations: [],
+        metadata: args.metadata || {},
+      });
+      const violations = sandboxPolicyEngine.evaluate({
+        tool_name: args.tool_name,
+        tool_action: args.tool_action || "unknown",
+        parameters: args.parameters || {},
+        data_fields_accessed: dataFields,
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ log_id: result.id, violations }),
+          },
+        ],
+      };
+    }
+  );
+
+  return sandboxServer;
+}
+
+// ============================================================
 // START SERVER
 // ============================================================
 async function main() {

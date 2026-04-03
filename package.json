@@ -1,5 +1,5 @@
 {
-  "name": "agent-audit-trail",
+  "name": "agent-audit-trail-mcp",
   "version": "1.0.0",
   "description": "Compliance infrastructure for agentic AI. Immutable audit logging, policy enforcement, and compliance reporting for AI agent workflows via MCP.",
   "main": "dist/index.js",
