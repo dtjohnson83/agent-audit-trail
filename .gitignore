@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.js.map
+*.d.ts.map
+.env
+.env.local
+.agent-audit-trail/
+*.log
+.DS_Store
