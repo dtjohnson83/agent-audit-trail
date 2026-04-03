@@ -7,3 +7,4 @@ dist/
 .agent-audit-trail/
 *.log
 .DS_Store
+.vercel

@@ -1,0 +1,7 @@
+{
+  "name": "agent-audit-trail",
+  "version": 2,
+  "rewrites": [
+    { "source": "/mcp", "destination": "/api/mcp" }
+  ]
+}
