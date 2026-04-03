@@ -189,7 +189,7 @@ export default function Landing() {
   const handleSubmit = async () => {
     if (!email.includes("@")) return;
     try {
-      const res = await fetch("/api/waitlist", {
+      const res = await fetch("https://agent-audit-trail-production.up.railway.app/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
