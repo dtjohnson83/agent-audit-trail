@@ -26,9 +26,13 @@ function readWaitlist() {
 }
 
 function writeWaitlist(emails) {
-  const dir = path.dirname(WAITLIST_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(WAITLIST_FILE, JSON.stringify(emails, null, 2));
+  try {
+    const dir = path.dirname(WAITLIST_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(WAITLIST_FILE, JSON.stringify(emails, null, 2));
+  } catch (err) {
+    console.error("[waitlist] Write error:", err.message);
+  }
 }
 
 function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
