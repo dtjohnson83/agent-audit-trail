@@ -302,11 +302,9 @@ async function submitWaitlist(){const e=document.getElementById('email-input').v
 </html>`;
 
 // ============================================================
-// Waitlist storage
+// Waitlist storage (in-memory for serverless)
 // ============================================================
-const WAITLIST_FILE = "/tmp/waitlist.json";
-function loadWaitlist() { try { return JSON.parse(fs.readFileSync(WAITLIST_FILE, "utf8")); } catch { return []; } }
-function saveWaitlist(emails) { fs.writeFileSync(WAITLIST_FILE, JSON.stringify(emails)); }
+const waitlistEmails = [];
 
 // ============================================================
 // HTTP Server
@@ -369,10 +367,8 @@ const server = http.createServer((req, res) => {
     req.on("end", () => {
       try {
         const { email } = JSON.parse(body);
-        if (email && email.includes("@")) {
-          const emails = loadWaitlist();
-          if (!emails.includes(email)) emails.push(email);
-          saveWaitlist(emails);
+        if (email && email.includes("@") && !waitlistEmails.includes(email)) {
+          waitlistEmails.push(email);
         }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
