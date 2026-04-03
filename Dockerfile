@@ -10,11 +10,11 @@ COPY tsconfig.server.json ./
 COPY src ./src
 RUN npm run build:mcp
 
-# Remove devDeps only (keep all production deps including MCP SDK)
-RUN npm prune --omit=dev || true
+# Keep all production deps (TypeScript already run, devDeps harmless at this stage)
+# @hono/node-server is required by @modelcontextprotocol/sdk for HTTP transport
 
 # Copy server entry point and smithery files
-COPY http-server.js ./http-server.js
+COPY http-server.cjs ./http-server.cjs
 COPY .smithery ./dist/smithery-http
 
 ENV AUDIT_DATA_DIR=/app/data
@@ -22,4 +22,4 @@ ENV PORT=3000
 ENV HOST=0.0.0.0
 EXPOSE 3000
 
-CMD ["node", "http-server.js"]
+CMD ["node", "http-server.cjs"]
