@@ -8,9 +8,9 @@
   },
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.server.json",
-    "postbuild": "next build",
     "build:server": "tsc -p tsconfig.server.json",
+    "build": "next build",
+    "postbuild": "tsc -p tsconfig.server.json",
     "start": "node dist/index.js",
     "dev": "tsc -p tsconfig.server.json && next build && node dist/index.js"
   },
