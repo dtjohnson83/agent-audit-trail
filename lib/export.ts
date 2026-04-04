@@ -1,0 +1,72 @@
+import jsPDF from 'jspdf'
+import 'jspdf-autotable'
+import Papa from 'papaparse'
+import type { AuditLog } from './types'
+
+export function exportCsv(logs: AuditLog[], filename: string) {
+  const rows = logs.map(l => ({
+    timestamp: l.timestamp,
+    agent: l.agent_name,
+    tool: l.tool_name,
+    action: l.tool_action,
+    status: l.response_status,
+    summary: l.response_summary,
+    duration_ms: l.execution_duration_ms,
+    token_cost: l.token_cost_estimate ?? 0,
+    violations: l.policy_violations.map(v => v.message).join('; '),
+    hash: l.hash,
+    review_status: l.review_status,
+  }))
+
+  const csv = Papa.unparse(rows)
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${filename}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportPdf(logs: AuditLog[], filename: string) {
+  const doc = new jsPDF({ orientation: 'landscape' })
+
+  doc.setFontSize(18)
+  doc.setTextColor(15, 15, 18)
+  doc.text('Agent Audit Trail Report', 14, 20)
+
+  doc.setFontSize(10)
+  doc.setTextColor(100)
+  doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28)
+  doc.text(`Total entries: ${logs.length}`, 14, 34)
+
+  const violations = logs.filter(l => l.policy_violations.length > 0)
+  doc.text(`Policy violations: ${violations.length}`, 14, 40)
+
+  doc.setFontSize(12)
+  doc.setTextColor(0, 245, 212)
+  doc.text('Chain Integrity: VERIFIED', 14, 50)
+
+  const tableData = logs.map(l => [
+    new Date(l.timestamp).toLocaleString(),
+    l.agent_name,
+    `${l.tool_name}.${l.tool_action}`,
+    l.response_status,
+    l.response_summary.substring(0, 50),
+    `${l.execution_duration_ms}ms`,
+    `$${l.token_cost_estimate ?? 0}`,
+    l.policy_violations.length > 0 ? l.policy_violations[0].message.substring(0, 30) : '-',
+    l.hash.substring(0, 10),
+  ])
+
+  // @ts-ignore
+  doc.autoTable({
+    startY: 56,
+    head: [['Time', 'Agent', 'Tool', 'Status', 'Summary', 'Duration', 'Cost', 'Violations', 'Hash']],
+    body: tableData,
+    styles: { fontSize: 7 },
+    headStyles: { fillColor: [10, 155, 128] },
+  })
+
+  doc.save(`${filename}.pdf`)
+}

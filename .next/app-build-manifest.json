@@ -1,26 +1,37 @@
 {
   "pages": {
     "/_not-found/page": [
-      "static/chunks/webpack-c8441f2d519541e3.js",
-      "static/chunks/fd9d1056-9f91b5e418130764.js",
-      "static/chunks/117-6d3152f80147ba9e.js",
+      "static/chunks/webpack-72c9b60d30b26fbd.js",
+      "static/chunks/fd9d1056-5f55067fad1d0619.js",
+      "static/chunks/117-19e2607edffa9051.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/chunks/app/_not-found/page-4b9eb8aab41bf6df.js"
+      "static/chunks/app/_not-found/page-572d89080e0f8c2f.js"
     ],
     "/layout": [
-      "static/chunks/webpack-c8441f2d519541e3.js",
-      "static/chunks/fd9d1056-9f91b5e418130764.js",
-      "static/chunks/117-6d3152f80147ba9e.js",
+      "static/chunks/webpack-72c9b60d30b26fbd.js",
+      "static/chunks/fd9d1056-5f55067fad1d0619.js",
+      "static/chunks/117-19e2607edffa9051.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/css/32bb2d9492d1c29f.css",
+      "static/css/4d236614f4ac18f3.css",
       "static/chunks/app/layout-1cf3462a0d4a0838.js"
     ],
-    "/page": [
-      "static/chunks/webpack-c8441f2d519541e3.js",
-      "static/chunks/fd9d1056-9f91b5e418130764.js",
-      "static/chunks/117-6d3152f80147ba9e.js",
+    "/dashboard/page": [
+      "static/chunks/webpack-72c9b60d30b26fbd.js",
+      "static/chunks/fd9d1056-5f55067fad1d0619.js",
+      "static/chunks/117-19e2607edffa9051.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/chunks/app/page-dfb98a07ccc3643c.js"
+      "static/chunks/2f0b94e8-c1bf379e68a8eeff.js",
+      "static/chunks/164f4fb6-3d611092c0d75bef.js",
+      "static/chunks/44530001-5f86e157ede9686f.js",
+      "static/chunks/948-4c3c54b10a7135e9.js",
+      "static/chunks/app/dashboard/page-b80ca8695e23af6f.js"
+    ],
+    "/page": [
+      "static/chunks/webpack-72c9b60d30b26fbd.js",
+      "static/chunks/fd9d1056-5f55067fad1d0619.js",
+      "static/chunks/117-19e2607edffa9051.js",
+      "static/chunks/main-app-c9bc8cee76a179af.js",
+      "static/chunks/app/page-546f35dc98095fbc.js"
     ]
   }
 }
