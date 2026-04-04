@@ -55,23 +55,36 @@ const GENESIS_HASH = "genesis";
 const AUDIT_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "audit-logs.json");
 const WAITLIST_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "waitlist.json");
 
+function sortedJSON(obj) {
+  if (typeof obj === "string") obj = JSON.parse(obj);
+  return JSON.stringify(Object.keys(obj).sort().reduce((acc, k) => {
+    const v = obj[k];
+    if (typeof v === "object" && v !== null) {
+      acc[k] = Array.isArray(v) ? v.map(vi => typeof vi === "object" ? sortedJSON(vi) : vi) : sortedJSON(v);
+    } else {
+      acc[k] = v;
+    }
+    return acc;
+  }, {}));
+}
+
 function computeEntryHash(previousHash, entry) {
   const payload = [
     previousHash ?? GENESIS_HASH,
-    entry.id,
+    entry.id || entry.entry_id,
     entry.timestamp,
     entry.agent_id,
     entry.agent_name,
     entry.tool_name,
     entry.tool_action,
-    JSON.stringify(entry.parameters ?? {}),
+    sortedJSON(entry.parameters ?? {}),
     entry.response_summary ?? "",
     entry.response_status ?? "success",
-    JSON.stringify(entry.data_fields_accessed ?? []),
+    JSON.stringify((entry.data_fields_accessed ?? []).sort()),
     String(entry.execution_duration_ms ?? 0),
     String(entry.token_cost_estimate ?? ""),
-    JSON.stringify(entry.policy_violations ?? []),
-    JSON.stringify(entry.metadata ?? {}),
+    sortedJSON(entry.policy_violations ?? []),
+    sortedJSON(entry.metadata ?? {}),
   ].join("|");
   return createHash("sha256").update(payload).digest("hex");
 }
@@ -93,7 +106,16 @@ async function verifyChain() {
     if (String(entry.previous_hash ?? null) !== String(expectedPrev)) {
       return { valid: false, at: entry.entry_id, reason: `previous_hash mismatch at entry ${i}: expected ${expectedPrev}, got ${entry.previous_hash}`, entries_checked: i };
     }
-    const recomputed = computeEntryHash(entry.previous_hash, entry);
+    // Supabase JSONB auto-parses stored JSON strings to objects on read.
+    // Use sorted-key JSON so hash is deterministic regardless of key ordering.
+    const entryForHash = {
+      ...entry,
+      parameters: entry.parameters ?? {},
+      data_fields_accessed: entry.data_fields_accessed ?? [],
+      policy_violations: entry.policy_violations ?? [],
+      metadata: entry.metadata ?? {},
+    };
+    const recomputed = computeEntryHash(entryForHash.previous_hash, entryForHash);
     if (recomputed !== entry.hash) {
       return { valid: false, at: entry.entry_id, reason: `hash mismatch at entry ${i}: entry has been modified after writing`, entries_checked: i };
     }
@@ -183,10 +205,10 @@ async function writeLog(entry) {
   const full = {
     ...entryData,
     hash,
-    parameters: JSON.stringify(entry.parameters ?? {}),
+    parameters: JSON.parse(sortedJSON(entry.parameters ?? {})),
     data_fields_accessed: entry.data_fields_accessed || [],
-    policy_violations: JSON.stringify(entry.policy_violations || []),
-    metadata: JSON.stringify(entry.metadata || {}),
+    policy_violations: JSON.parse(sortedJSON(entry.policy_violations || [])),
+    metadata: JSON.parse(sortedJSON(entry.metadata || {})),
   };
 
   if (USE_SUPABASE) {
