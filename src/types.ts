@@ -6,6 +6,10 @@
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
+  // Hash chaining for immutability
+  previous_hash: string | null;  // null for genesis entry
+  hash: string;                  // SHA-256 of previous_hash + entry contents
+  // Core fields
   agent_id: string;
   agent_name: string;
   tool_name: string;
@@ -83,4 +87,11 @@ export interface AlertConfig {
   destination: string;
   min_severity: "low" | "medium" | "high" | "critical";
   enabled: boolean;
+}
+
+export interface ChainVerificationResult {
+  valid: boolean;
+  entries_checked: number;
+  broken_at: string | null;  // ID of first tampered entry, null if valid
+  error: string | null;
 }

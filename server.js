@@ -1,13 +1,50 @@
 /**
  * Agent Audit Trail - Vercel Serverless HTTP Handler
+ * With cryptographic hash chaining for tamper-evident logging.
  */
-const { randomUUID } = require("crypto");
+const { randomUUID, createHash } = require("crypto");
 
 // ============================================================
-// In-memory log store + policy engine
+// Hash chaining for immutability
 // ============================================================
+const GENESIS_HASH = "genesis";
 const logs = [];
 
+function computeEntryHash(previousHash, entry) {
+  const payload = [
+    previousHash ?? GENESIS_HASH,
+    entry.id, entry.timestamp,
+    entry.agent_id, entry.agent_name, entry.tool_name, entry.tool_action,
+    JSON.stringify(entry.parameters ?? {}),
+    entry.response_summary ?? "",
+    entry.response_status ?? "success",
+    JSON.stringify(entry.data_fields_accessed ?? []),
+    String(entry.execution_duration_ms ?? 0),
+    String(entry.token_cost_estimate ?? ""),
+    JSON.stringify(entry.policy_violations ?? []),
+    JSON.stringify(entry.metadata ?? {}),
+  ].join("|");
+  return createHash("sha256").update(payload).digest("hex");
+}
+
+function verifyChain() {
+  for (let i = 0; i < logs.length; i++) {
+    const entry = logs[i];
+    const expectedPrev = i === 0 ? null : logs[i - 1].hash;
+    if (entry.previous_hash !== expectedPrev) {
+      return { valid: false, at: entry.id, reason: "previous_hash broken", entries_checked: i };
+    }
+    const recomputed = computeEntryHash(entry.previous_hash, entry);
+    if (recomputed !== entry.hash) {
+      return { valid: false, at: entry.id, reason: "hash mismatch - entry tampered", entries_checked: i };
+    }
+  }
+  return { valid: true, entries_checked: logs.length };
+}
+
+// ============================================================
+// Policy engine
+// ============================================================
 function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
   const violations = [];
   const text = `${toolName} ${toolAction} ${dataFields.join(" ")}`.toLowerCase();
@@ -27,8 +64,18 @@ function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
   return violations;
 }
 
+// ============================================================
+// Log store with hash chaining
+// ============================================================
 function writeLog(entry) {
-  const full = { ...entry, id: randomUUID(), timestamp: new Date().toISOString() };
+  const id = randomUUID();
+  const timestamp = new Date().toISOString();
+  const previousHash = logs.length > 0 ? logs[logs.length - 1].hash : null;
+  const entryData = {
+    ...entry, id, timestamp, previous_hash: previousHash,
+  };
+  const hash = computeEntryHash(previousHash, entryData);
+  const full = { ...entryData, hash };
   logs.unshift(full);
   if (logs.length > 10000) logs.splice(0, logs.length - 10000);
   return full;
@@ -70,10 +117,14 @@ function handleMcp(body) {
       };
       const result = writeLog(entry);
       const violations = evaluatePolicy(args.tool_name || "unknown", args.tool_action || "", args.parameters || {}, dataFields);
-      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ log_id: result.id, violations }) }] } };
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ log_id: result.id, hash: result.hash, previous_hash: result.previous_hash, violations }) }] } };
     }
     if (name === "query_logs") return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(queryLogs({ agent_id: args.agent_id, tool_name: args.tool_name, has_violations: args.has_violations, limit: args.limit })) }] } };
     if (name === "get_summary") return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(getSummary()) }] } };
+    if (name === "verify_chain") {
+      const result = verifyChain();
+      return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify({ chain_intact: result.valid, entries_verified: result.entries_checked, broken_at: result.at ?? "none", detail: result.valid ? `All ${result.entries_checked} entries verified. Chain is intact.` : result.reason })}] } };
+    }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown tool: ${name}` } };
   }
   if (method === "tools/list") {
@@ -81,6 +132,7 @@ function handleMcp(body) {
       { name: "log_action", description: "Log an agent action to the immutable audit trail", inputSchema: { type: "object", properties: { agent_name: { type: "string" }, agent_id: { type: "string" }, tool_name: { type: "string" }, tool_action: { type: "string" }, parameters: { type: "object" }, data_fields_accessed: { type: "string" }, metadata: { type: "object" } }, required: ["agent_name", "tool_name"] } },
       { name: "query_logs", description: "Search and filter audit log entries", inputSchema: { type: "object", properties: { agent_id: { type: "string" }, tool_name: { type: "string" }, has_violations: { type: "boolean" }, limit: { type: "number" } } } },
       { name: "get_summary", description: "Get a dashboard summary of audit activity", inputSchema: { type: "object", properties: {} } },
+      { name: "verify_chain", description: "Verify the cryptographic integrity of the audit trail chain", inputSchema: { type: "object", properties: {} } },
     ]}};
   }
   return { jsonrpc: "2.0", id, error: { code: -32601, message: `Unknown method: ${method}` } };

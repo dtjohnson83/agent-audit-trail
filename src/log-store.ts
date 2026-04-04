@@ -1,10 +1,13 @@
 /**
  * Agent Audit Trail - Log Store
- * Immutable audit log storage.
- * MVP uses in-memory + JSON file persistence.
- * Production swaps to Supabase/PostgreSQL.
+ * Immutable audit log storage with cryptographic hash chaining.
+ *
+ * Every entry is signed with SHA-256 of: (previous_entry_hash + entry_contents)
+ * This creates an immutable, tamper-evident chain.
+ * Any modification to historical entries breaks the chain and is detectable.
  */
 
+import { createHash } from "crypto";
 import { v4 as uuidv4 } from "uuid";
 import * as fs from "fs";
 import * as path from "path";
@@ -13,7 +16,40 @@ import type {
   AuditQueryOptions,
   AuditSummary,
   AgentRegistration,
+  ChainVerificationResult,
 } from "./types.js";
+
+const GENESIS_HASH = "genesis";
+
+/**
+ * Compute the SHA-256 hash of an audit log entry.
+ * Covers all core fields but NOT the hash fields themselves (previous_hash, hash).
+ * The previous_hash is prepended to bind entries together.
+ */
+function computeEntryHash(
+  previousHash: string | null,
+  entry: Omit<AuditLogEntry, "previous_hash" | "hash">
+): string {
+  const payload = [
+    previousHash ?? GENESIS_HASH,
+    entry.id,
+    entry.timestamp,
+    entry.agent_id,
+    entry.agent_name,
+    entry.tool_name,
+    entry.tool_action,
+    JSON.stringify(entry.parameters ?? {}),
+    entry.response_summary ?? "",
+    entry.response_status ?? "success",
+    JSON.stringify(entry.data_fields_accessed ?? []),
+    String(entry.execution_duration_ms ?? 0),
+    String(entry.token_cost_estimate ?? ""),
+    JSON.stringify(entry.policy_violations ?? []),
+    JSON.stringify(entry.metadata ?? {}),
+  ].join("|");
+
+  return createHash("sha256").update(payload).digest("hex");
+}
 
 export class LogStore {
   private logs: AuditLogEntry[] = [];
@@ -28,16 +64,32 @@ export class LogStore {
   }
 
   /**
-   * Write an immutable log entry. Once written, entries cannot be
-   * modified or deleted (compliance requirement).
+   * Write an immutable log entry.
+   *
+   * The entry is cryptographically chained to the previous entry.
+   * Once written, the chain cannot be broken without detection.
+   *
+   * @returns The written entry with hash and previous_hash populated.
    */
   writeLog(
-    entry: Omit<AuditLogEntry, "id" | "timestamp">
+    entry: Omit<AuditLogEntry, "id" | "timestamp" | "previous_hash" | "hash">
   ): AuditLogEntry {
-    const fullEntry: AuditLogEntry = {
+    const id = uuidv4();
+    const timestamp = new Date().toISOString();
+    const previousHash = this.logs.length > 0 ? this.logs[this.logs.length - 1].hash : null;
+
+    const entryData = {
       ...entry,
-      id: uuidv4(),
-      timestamp: new Date().toISOString(),
+      id,
+      timestamp,
+      previous_hash: previousHash,
+    };
+
+    const hash = computeEntryHash(previousHash, entryData);
+
+    const fullEntry: AuditLogEntry = {
+      ...entryData,
+      hash,
     };
 
     this.logs.push(fullEntry);
@@ -45,6 +97,56 @@ export class LogStore {
     this.persistToDisk();
 
     return fullEntry;
+  }
+
+  /**
+   * Verify the integrity of the entire audit chain.
+   *
+   * Returns which entry (if any) is the first to fail verification.
+   * A valid chain returns { valid: true, entries_checked, broken_at: null, error: null }.
+   *
+   * Call this after loading from disk, before serving compliance reports.
+   */
+  verifyChain(): ChainVerificationResult {
+    if (this.logs.length === 0) {
+      return {
+        valid: true,
+        entries_checked: 0,
+        broken_at: null,
+        error: null,
+      };
+    }
+
+    for (let i = 0; i < this.logs.length; i++) {
+      const entry = this.logs[i];
+      const expectedPreviousHash = i === 0 ? null : this.logs[i - 1].hash;
+
+      if (entry.previous_hash !== expectedPreviousHash) {
+        return {
+          valid: false,
+          entries_checked: i,
+          broken_at: entry.id,
+          error: `Entry ${i} (${entry.id}): previous_hash mismatch. Expected ${expectedPreviousHash}, got ${entry.previous_hash}.`,
+        };
+      }
+
+      const recomputedHash = computeEntryHash(entry.previous_hash, entry);
+      if (recomputedHash !== entry.hash) {
+        return {
+          valid: false,
+          entries_checked: i,
+          broken_at: entry.id,
+          error: `Entry ${i} (${entry.id}): hash mismatch. Entry contents have been modified after writing.`,
+        };
+      }
+    }
+
+    return {
+      valid: true,
+      entries_checked: this.logs.length,
+      broken_at: null,
+      error: null,
+    };
   }
 
   /**
@@ -146,13 +248,18 @@ export class LogStore {
   /**
    * Register or update an agent.
    */
-  registerAgent(id: string, name: string, description: string = ""): AgentRegistration {
+  registerAgent(
+    id: string,
+    name: string,
+    description: string = ""
+  ): AgentRegistration {
     const existing = this.agents.get(id);
     const agent: AgentRegistration = {
       id,
       name,
       description,
-      registered_at: existing?.registered_at || new Date().toISOString(),
+      registered_at:
+        existing?.registered_at || new Date().toISOString(),
       last_active: new Date().toISOString(),
       total_actions: existing?.total_actions || 0,
       status: "active",
@@ -171,13 +278,16 @@ export class LogStore {
 
   /**
    * Export logs as JSON for compliance reporting.
+   * Includes chain verification result so auditors know the chain is intact.
    */
   exportLogs(options: AuditQueryOptions = {}): string {
+    const chainStatus = this.verifyChain();
     const logs = this.queryLogs({ ...options, limit: 999999 });
     return JSON.stringify(
       {
         export_timestamp: new Date().toISOString(),
         export_version: "1.0",
+        chain_verification: chainStatus,
         total_entries: logs.length,
         entries: logs,
       },
@@ -186,7 +296,10 @@ export class LogStore {
     );
   }
 
-  private updateAgentActivity(agentId: string, agentName: string): void {
+  private updateAgentActivity(
+    agentId: string,
+    agentName: string
+  ): void {
     const agent = this.agents.get(agentId);
     if (agent) {
       agent.last_active = new Date().toISOString();
@@ -209,7 +322,7 @@ export class LogStore {
         logs: this.logs,
         agents: Array.from(this.agents.entries()),
       };
-      fs.writeFileSync(this.persistPath, JSON.stringify(data));
+      fs.writeFileSync(this.persistPath, JSON.stringify(data, null, 2));
     } catch {
       // Silent fail on persistence - logs are still in memory
     }

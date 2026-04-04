@@ -226,6 +226,8 @@ server.tool(
                 status: l.response_status,
                 violations: l.policy_violations.length,
                 duration_ms: l.execution_duration_ms,
+                previous_hash: l.previous_hash,
+                hash: l.hash,
               })),
             },
             null,
@@ -277,6 +279,40 @@ server.tool(
     return {
       content: [
         { type: "text" as const, text: JSON.stringify(summary, null, 2) },
+      ],
+    };
+  }
+);
+
+// ============================================================
+// TOOL: verify_chain
+// Verify the cryptographic integrity of the entire audit chain.
+// Returns which entry (if any) first failed verification.
+// Run this before exporting compliance reports.
+// ============================================================
+server.tool(
+  "verify_chain",
+  "Verify the cryptographic integrity of the entire audit trail chain. Checks that no log entries have been modified or deleted since they were written. Returns which entry failed and why, or confirms the chain is intact.",
+  {},
+  async () => {
+    const result = logStore.verifyChain();
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            {
+              chain_intact: result.valid,
+              entries_verified: result.entries_checked,
+              broken_at: result.broken_at ?? "none",
+              detail: result.valid
+                ? `All ${result.entries_checked} entries verified. Chain is intact.`
+                : result.error,
+            },
+            null,
+            2
+          ),
+        },
       ],
     };
   }
