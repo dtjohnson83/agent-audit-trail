@@ -131,7 +131,7 @@ function normalizeJSONB(val) {
 async function verifyChain() {
   let logs;
   if (USE_SUPABASE) {
-    logs = await supabaseFetch("audit_logs?select=*&order=timestamp.asc&limit=10000");
+    logs = await supabaseFetch("audit_logs?select=*&order=entry_id.asc&limit=10000");
     if (!logs) return { valid: false, at: null, reason: "Supabase unavailable", entries_checked: 0 };
   } else {
     logs = loadLocalLogs();
@@ -226,11 +226,11 @@ function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
 async function writeLog(entry) {
   let previousHash = null;
   if (USE_SUPABASE) {
-    const latest = await supabaseFetch("audit_logs?select=hash&order=timestamp.desc.nullslast&limit=1");
+    const latest = await supabaseFetch("audit_logs?select=hash&order=entry_id.desc&limit=1");
     if (latest && latest.length > 0) previousHash = latest[0].hash;
   } else {
     const localLogs = loadLocalLogs();
-    if (localLogs.length > 0) previousHash = localLogs[localLogs.length - 1].hash;
+    if (localLogs.length > 0) previousHash = localLogs[0].hash; // front = newest (unshift)
   }
 
   const id = randomUUID();
@@ -288,7 +288,7 @@ async function queryLogs(opts = {}) {
   const limit = opts.limit || 20;
   const offset = opts.offset || 0;
   if (USE_SUPABASE) {
-    let query = `audit_logs?select=*&order=timestamp.desc&limit=${limit}&offset=${offset}`;
+    let query = `audit_logs?select=*&order=entry_id.desc&limit=${limit}&offset=${offset}`;
     if (opts.agent_id) query += `&agent_id=eq.${encodeURIComponent(opts.agent_id)}`;
     if (opts.tool_name) query += `&tool_name=eq.${encodeURIComponent(opts.tool_name)}`;
     if (opts.status) query += `&response_status=eq.${encodeURIComponent(opts.status)}`;
@@ -338,7 +338,7 @@ async function getLogById(entryId) {
 async function getSummary() {
   let logs;
   if (USE_SUPABASE) {
-    logs = await supabaseFetch("audit_logs?select=agent_name,tool_name,policy_violations,response_status&order=timestamp.desc&limit=10000");
+    logs = await supabaseFetch("audit_logs?select=agent_name,tool_name,policy_violations,response_status&order=entry_id.desc&limit=10000");
     if (!logs) logs = [];
   } else {
     logs = loadLocalLogs();
