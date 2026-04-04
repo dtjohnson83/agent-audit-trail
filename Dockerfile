@@ -1,7 +1,6 @@
 FROM node:20-alpine
 WORKDIR /app
-
-# Install ALL deps (including devDeps for TypeScript)
+ARG CACHEBUST=20260404
 COPY package*.json ./
 RUN npm ci
 
@@ -13,7 +12,7 @@ RUN npm run build:mcp
 # Remove devDeps for smaller production image
 RUN npm prune --omit=dev
 
-# Copy HTTP server entry point
+# Copy HTTP server entry point (v2 - hash chaining)
 COPY http-server.cjs ./http-server.cjs
 
 ENV AUDIT_DATA_DIR=/app/data

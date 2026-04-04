@@ -41,15 +41,17 @@ function computeEntryHash(previousHash, entry) {
 }
 
 function verifyChain() {
-  for (let i = 0; i < logs.length; i++) {
-    const entry = logs[i];
-    const expectedPrev = i === 0 ? null : logs[i - 1].hash;
+  // logs[] is newest-first (unshift). Verify oldest-first.
+  const reversed = [...logs].reverse();
+  for (let i = 0; i < reversed.length; i++) {
+    const entry = reversed[i];
+    const expectedPrev = i === 0 ? null : reversed[i - 1].hash;
     if (entry.previous_hash !== expectedPrev) {
-      return { valid: false, at: entry.id, reason: "previous_hash broken", entries_checked: i };
+      return { valid: false, at: entry.id, reason: `previous_hash mismatch at entry ${i}: expected ${expectedPrev}, got ${entry.previous_hash}`, entries_checked: i };
     }
     const recomputed = computeEntryHash(entry.previous_hash, entry);
     if (recomputed !== entry.hash) {
-      return { valid: false, at: entry.id, reason: "hash mismatch - entry tampered", entries_checked: i };
+      return { valid: false, at: entry.id, reason: `hash mismatch at entry ${i}: entry has been modified after writing`, entries_checked: i };
     }
   }
   return { valid: true, entries_checked: logs.length };

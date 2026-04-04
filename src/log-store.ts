@@ -117,9 +117,11 @@ export class LogStore {
       };
     }
 
-    for (let i = 0; i < this.logs.length; i++) {
-      const entry = this.logs[i];
-      const expectedPreviousHash = i === 0 ? null : this.logs[i - 1].hash;
+    // logs[] is stored newest-first; verify oldest-first (genesis first)
+    const reversed = [...this.logs].reverse();
+    for (let i = 0; i < reversed.length; i++) {
+      const entry = reversed[i];
+      const expectedPreviousHash = i === 0 ? null : reversed[i - 1].hash;
 
       if (entry.previous_hash !== expectedPreviousHash) {
         return {
