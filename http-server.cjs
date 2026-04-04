@@ -55,20 +55,33 @@ const GENESIS_HASH = "genesis";
 const AUDIT_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "audit-logs.json");
 const WAITLIST_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "waitlist.json");
 
+/**
+ * Sort keys in a JSON object for deterministic serialization.
+ * Handles nested objects and arrays of objects.
+ */
 function sortedJSON(obj) {
-  if (typeof obj === "string") obj = JSON.parse(obj);
-  if (Array.isArray(obj)) {
-    return JSON.stringify(obj.map(item => typeof item === "object" && item !== null ? sortedJSON(item) : item));
+  if (typeof obj === "string") {
+    try { obj = JSON.parse(obj); } catch { return "{}"; }
   }
-  return JSON.stringify(Object.keys(obj).sort().reduce((acc, k) => {
+  if (Array.isArray(obj)) {
+    return JSON.stringify(obj.map(item => {
+      if (typeof item === "object" && item !== null) return sortedJSON(item);
+      return item;
+    }));
+  }
+  const keys = Object.keys(obj).sort();
+  const result = {};
+  for (const k of keys) {
     const v = obj[k];
     if (typeof v === "object" && v !== null) {
-      acc[k] = Array.isArray(v) ? v.map(vi => typeof vi === "object" ? sortedJSON(vi) : vi) : sortedJSON(v);
+      result[k] = Array.isArray(v)
+        ? v.map(vi => (typeof vi === "object" && vi !== null) ? sortedJSON(vi) : vi)
+        : sortedJSON(v);
     } else {
-      acc[k] = v;
+      result[k] = v;
     }
-    return acc;
-  }, {}));
+  }
+  return JSON.stringify(result);
 }
 
 function computeEntryHash(previousHash, entry) {
@@ -83,13 +96,36 @@ function computeEntryHash(previousHash, entry) {
     sortedJSON(entry.parameters ?? {}),
     entry.response_summary ?? "",
     entry.response_status ?? "success",
-    JSON.stringify((entry.data_fields_accessed ?? []).sort()),
+    JSON.stringify((entry.data_fields_accessed ?? []).slice().sort()),
     String(entry.execution_duration_ms ?? 0),
     String(entry.token_cost_estimate ?? ""),
     sortedJSON(entry.policy_violations ?? []),
     sortedJSON(entry.metadata ?? {}),
   ].join("|");
   return createHash("sha256").update(payload).digest("hex");
+}
+
+/**
+ * Normalize a value from Supabase JSONB for consistent handling.
+ * Handles: objects, arrays of objects, strings, numbers, etc.
+ */
+function normalizeJSONB(val) {
+  if (typeof val === "undefined" || val === null) return null;
+  if (typeof val === "object") {
+    if (Array.isArray(val)) {
+      return val.map(item => {
+        if (typeof item === "string") {
+          try { return JSON.parse(item); } catch { return item; }
+        }
+        return item;
+      });
+    }
+    return val;
+  }
+  if (typeof val === "string") {
+    try { return JSON.parse(val); } catch { return val; }
+  }
+  return val;
 }
 
 async function verifyChain() {
@@ -107,20 +143,23 @@ async function verifyChain() {
     const entry = logs[i];
     const expectedPrev = i === 0 ? null : logs[i - 1].hash;
     if (String(entry.previous_hash ?? null) !== String(expectedPrev)) {
-      return { valid: false, at: entry.entry_id, reason: `previous_hash mismatch at entry ${i}: expected ${expectedPrev}, got ${entry.previous_hash}`, entries_checked: i };
+      return { valid: false, at: entry.entry_id, reason: `previous_hash mismatch at entry ${i}`, entries_checked: i };
     }
-    // Supabase JSONB auto-parses stored JSON strings to objects on read.
-    // Use sorted-key JSON so hash is deterministic regardless of key ordering.
+    // Normalize JSONB fields before hash comparison
+    const norm = normalizeJSONB(entry.parameters ?? {});
+    const normMeta = normalizeJSONB(entry.metadata ?? {});
+    const normPV = normalizeJSONB(entry.policy_violations ?? []);
+    const normDfa = Array.isArray(entry.data_fields_accessed) ? entry.data_fields_accessed : [];
     const entryForHash = {
       ...entry,
-      parameters: entry.parameters ?? {},
-      data_fields_accessed: entry.data_fields_accessed ?? [],
-      policy_violations: entry.policy_violations ?? [],
-      metadata: entry.metadata ?? {},
+      parameters: norm,
+      data_fields_accessed: normDfa,
+      policy_violations: normPV,
+      metadata: normMeta,
     };
     const recomputed = computeEntryHash(entryForHash.previous_hash, entryForHash);
     if (recomputed !== entry.hash) {
-      return { valid: false, at: entry.entry_id, reason: `hash mismatch at entry ${i}: entry has been modified after writing`, entries_checked: i };
+      return { valid: false, at: entry.entry_id, reason: `hash mismatch at entry ${i}: computed ${recomputed.slice(0,16)}... != stored ${entry.hash.slice(0,16)}...`, entries_checked: i };
     }
   }
   return { valid: true, entries_checked: logs.length, at: null };
@@ -185,7 +224,6 @@ function evaluatePolicy(toolName, toolAction, parameters, dataFields) {
 // Log store — Supabase backend with local fallback
 // ============================================================
 async function writeLog(entry) {
-  // Get previous hash (latest entry)
   let previousHash = null;
   if (USE_SUPABASE) {
     const latest = await supabaseFetch("audit_logs?select=hash&order=timestamp.desc.nullslast&limit=1");
@@ -208,10 +246,11 @@ async function writeLog(entry) {
   const full = {
     ...entryData,
     hash,
-    parameters: JSON.parse(sortedJSON(entry.parameters ?? {})),
+    // Store as sorted JSON strings for determinism
+    parameters: sortedJSON(entry.parameters ?? {}),
     data_fields_accessed: entry.data_fields_accessed || [],
-    policy_violations: JSON.parse(sortedJSON(entry.policy_violations || [])),
-    metadata: JSON.parse(sortedJSON(entry.metadata || {})),
+    policy_violations: sortedJSON(entry.policy_violations || []),
+    metadata: sortedJSON(entry.metadata || {}),
   };
 
   if (USE_SUPABASE) {
@@ -220,13 +259,12 @@ async function writeLog(entry) {
       const saved = result[0];
       return {
         ...saved,
-        parameters: typeof saved.parameters === "string" ? JSON.parse(saved.parameters) : (saved.parameters || {}),
-        data_fields_accessed: saved.data_fields_accessed || [],
-        policy_violations: typeof saved.policy_violations === "string" ? JSON.parse(saved.policy_violations) : (saved.policy_violations || []),
-        metadata: typeof saved.metadata === "string" ? JSON.parse(saved.metadata) : (saved.metadata || {}),
+        parameters: normalizeJSONB(saved.parameters),
+        data_fields_accessed: Array.isArray(saved.data_fields_accessed) ? saved.data_fields_accessed : [],
+        policy_violations: normalizeJSONB(saved.policy_violations),
+        metadata: normalizeJSONB(saved.metadata),
       };
     }
-    // Fallback to local if Supabase insert failed
     console.error("[supabase] insert failed, using local fallback");
   }
 
@@ -249,7 +287,6 @@ async function writeLog(entry) {
 async function queryLogs(opts = {}) {
   const limit = opts.limit || 20;
   const offset = opts.offset || 0;
-
   if (USE_SUPABASE) {
     let query = `audit_logs?select=*&order=timestamp.desc&limit=${limit}&offset=${offset}`;
     if (opts.agent_id) query += `&agent_id=eq.${encodeURIComponent(opts.agent_id)}`;
@@ -258,20 +295,17 @@ async function queryLogs(opts = {}) {
     if (opts.has_violations) query += `&policy_violations=not.is.null`;
     if (opts.start_date) query += `&timestamp=gte.${encodeURIComponent(opts.start_date)}`;
     if (opts.end_date) query += `&timestamp=lte.${encodeURIComponent(opts.end_date)}`;
-
     const logs = await supabaseFetch(query);
     if (logs) {
       return logs.map(l => ({
         ...l,
-        parameters: typeof l.parameters === "string" ? JSON.parse(l.parameters) : (l.parameters || {}),
-        data_fields_accessed: l.data_fields_accessed || [],
-        policy_violations: typeof l.policy_violations === "string" ? JSON.parse(l.policy_violations) : (l.policy_violations || []),
-        metadata: typeof l.metadata === "string" ? JSON.parse(l.metadata) : (l.metadata || {}),
+        parameters: normalizeJSONB(l.parameters),
+        data_fields_accessed: Array.isArray(l.data_fields_accessed) ? l.data_fields_accessed : [],
+        policy_violations: normalizeJSONB(l.policy_violations),
+        metadata: normalizeJSONB(l.metadata),
       }));
     }
   }
-
-  // Local fallback
   let logs = loadLocalLogs();
   if (opts.agent_id) logs = logs.filter(l => l.agent_id === opts.agent_id);
   if (opts.tool_name) logs = logs.filter(l => l.tool_name === opts.tool_name);
@@ -289,10 +323,10 @@ async function getLogById(entryId) {
       const l = logs[0];
       return {
         ...l,
-        parameters: typeof l.parameters === "string" ? JSON.parse(l.parameters) : (l.parameters || {}),
-        data_fields_accessed: l.data_fields_accessed || [],
-        policy_violations: typeof l.policy_violations === "string" ? JSON.parse(l.policy_violations) : (l.policy_violations || []),
-        metadata: typeof l.metadata === "string" ? JSON.parse(l.metadata) : (l.metadata || {}),
+        parameters: normalizeJSONB(l.parameters),
+        data_fields_accessed: Array.isArray(l.data_fields_accessed) ? l.data_fields_accessed : [],
+        policy_violations: normalizeJSONB(l.policy_violations),
+        metadata: normalizeJSONB(l.metadata),
       };
     }
     return null;
@@ -309,21 +343,15 @@ async function getSummary() {
   } else {
     logs = loadLocalLogs();
   }
-
   const byAgent = {}, byTool = {};
   let violations = 0;
   for (const l of logs) {
     byAgent[l.agent_name] = (byAgent[l.agent_name] || 0) + 1;
     byTool[l.tool_name] = (byTool[l.tool_name] || 0) + 1;
-    const pvs = typeof l.policy_violations === "string" ? JSON.parse(l.policy_violations) : (l.policy_violations || []);
-    if (pvs.length > 0) violations++;
+    const pvs = normalizeJSONB(l.policy_violations);
+    if (Array.isArray(pvs) && pvs.length > 0) violations++;
   }
-  return {
-    total_logs: logs.length,
-    logs_with_violations: violations,
-    by_agent: byAgent,
-    by_tool: byTool,
-  };
+  return { total_logs: logs.length, logs_with_violations: violations, by_agent: byAgent, by_tool: byTool };
 }
 
 // ============================================================
@@ -348,11 +376,11 @@ async function handleMCPRequest(method, params) {
             inputSchema: {
               type: "object",
               properties: {
-                agent_name: { type: "string", description: "Name of the agent performing the action" },
-                agent_id: { type: "string", description: "Unique agent ID (auto-generated if not provided)" },
-                tool_name: { type: "string", description: "Name of the tool being called" },
-                tool_action: { type: "string", description: "Specific action (e.g., SELECT, INSERT)" },
-                parameters: { type: "object", additionalProperties: true, description: "Tool parameters" },
+                agent_name: { type: "string", description: "Name of the agent" },
+                agent_id: { type: "string", description: "Unique agent ID" },
+                tool_name: { type: "string", description: "Name of the tool called" },
+                tool_action: { type: "string", description: "Specific action (e.g., SELECT)" },
+                parameters: { type: "object", additionalProperties: true },
                 response_summary: { type: "string" },
                 response_status: { type: "string", enum: ["success", "error", "blocked"] },
                 data_fields_accessed: { type: "array", items: { type: "string" } },
@@ -365,7 +393,7 @@ async function handleMCPRequest(method, params) {
           },
           {
             name: "query_logs",
-            description: "Search the audit trail with filters. Returns log entries sorted newest first.",
+            description: "Search the audit trail with filters.",
             inputSchema: {
               type: "object",
               properties: {
@@ -382,7 +410,7 @@ async function handleMCPRequest(method, params) {
           },
           {
             name: "get_log_detail",
-            description: "Get full details for a specific audit log entry by ID.",
+            description: "Get full details for a specific audit log entry.",
             inputSchema: { type: "object", properties: { log_id: { type: "string" } }, required: ["log_id"] },
           },
           {
@@ -392,12 +420,12 @@ async function handleMCPRequest(method, params) {
           },
           {
             name: "verify_chain",
-            description: "Verify the cryptographic integrity of the entire audit trail chain. Detects any modification or deletion of log entries.",
+            description: "Verify the cryptographic integrity of the entire audit trail chain.",
             inputSchema: { type: "object", properties: {} },
           },
           {
             name: "export_audit_log",
-            description: "Export audit logs as a JSON compliance report. Includes chain verification result.",
+            description: "Export audit logs as a JSON compliance report.",
             inputSchema: {
               type: "object",
               properties: {
