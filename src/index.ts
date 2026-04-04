@@ -154,7 +154,7 @@ server.tool(
 
     // Phase 4: Check policy via Supabase Edge Function BEFORE logging
     let policyBlocked = false
-    let policyViolations: Array<{ rule_id: string; rule_name: string; severity: string; action_taken: string; details: string }> = []
+    let policyViolations: Array<{ rule_id: string; rule_name: string; severity: "low" | "medium" | "high" | "critical"; action_taken: "flagged" | "blocked" | "alerted"; details: string }> = []
 
     const remoteCheck = await checkPolicyRemote({
       agent_id: agentId,
@@ -169,8 +169,8 @@ server.tool(
       policyViolations = remoteCheck.violations.map(v => ({
         rule_id: v.rule_id,
         rule_name: v.message || v.rule_id,
-        severity: v.severity,
-        action_taken: v.enforcement,
+        severity: (v.severity || "low") as "low" | "medium" | "high" | "critical",
+        action_taken: (v.enforcement || "flagged") as "flagged" | "blocked" | "alerted",
         details: v.message,
       }))
     }
