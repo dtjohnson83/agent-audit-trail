@@ -217,10 +217,10 @@ async function writeLog(entry) {
       const saved = result[0];
       return {
         ...saved,
-        parameters: JSON.parse(saved.parameters || "{}"),
+        parameters: typeof saved.parameters === "string" ? JSON.parse(saved.parameters) : (saved.parameters || {}),
         data_fields_accessed: saved.data_fields_accessed || [],
-        policy_violations: JSON.parse(saved.policy_violations || "[]"),
-        metadata: JSON.parse(saved.metadata || "{}"),
+        policy_violations: typeof saved.policy_violations === "string" ? JSON.parse(saved.policy_violations) : (saved.policy_violations || []),
+        metadata: typeof saved.metadata === "string" ? JSON.parse(saved.metadata) : (saved.metadata || {}),
       };
     }
     // Fallback to local if Supabase insert failed
@@ -260,10 +260,10 @@ async function queryLogs(opts = {}) {
     if (logs) {
       return logs.map(l => ({
         ...l,
-        parameters: JSON.parse(l.parameters || "{}"),
+        parameters: typeof l.parameters === "string" ? JSON.parse(l.parameters) : (l.parameters || {}),
         data_fields_accessed: l.data_fields_accessed || [],
-        policy_violations: JSON.parse(l.policy_violations || "[]"),
-        metadata: JSON.parse(l.metadata || "{}"),
+        policy_violations: typeof l.policy_violations === "string" ? JSON.parse(l.policy_violations) : (l.policy_violations || []),
+        metadata: typeof l.metadata === "string" ? JSON.parse(l.metadata) : (l.metadata || {}),
       }));
     }
   }
@@ -286,10 +286,10 @@ async function getLogById(entryId) {
       const l = logs[0];
       return {
         ...l,
-        parameters: JSON.parse(l.parameters || "{}"),
+        parameters: typeof l.parameters === "string" ? JSON.parse(l.parameters) : (l.parameters || {}),
         data_fields_accessed: l.data_fields_accessed || [],
-        policy_violations: JSON.parse(l.policy_violations || "[]"),
-        metadata: JSON.parse(l.metadata || "{}"),
+        policy_violations: typeof l.policy_violations === "string" ? JSON.parse(l.policy_violations) : (l.policy_violations || []),
+        metadata: typeof l.metadata === "string" ? JSON.parse(l.metadata) : (l.metadata || {}),
       };
     }
     return null;
