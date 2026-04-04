@@ -408,7 +408,7 @@ export default function LandingPage() {
                 </div>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Dan Johnson</div>
-                  <div style={{ fontSize: 10, color: C.textDim }}>Founder · DANZUS Holdings</div>
+                  <div style={{ fontSize: 10, color: C.textDim }}>Founder · DANZUS Holdings LLC</div>
                 </div>
               </div>
             </div>
