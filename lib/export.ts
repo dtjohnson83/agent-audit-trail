@@ -31,6 +31,17 @@ export function exportCsv(logs: AuditLog[], filename: string) {
 export function exportPdf(logs: AuditLog[], filename: string) {
   const doc = new jsPDF({ orientation: 'landscape' })
 
+  // Verify chain integrity
+  let chainValid = true
+  let chainBrokenAt: string | null = null
+  for (let i = 1; i < logs.length; i++) {
+    if (logs[i].previous_hash && logs[i].previous_hash !== logs[i - 1].hash) {
+      chainValid = false
+      chainBrokenAt = `${logs[i].agent_name} ${logs[i].tool_name} (${logs[i].id.slice(0, 8)})`
+      break
+    }
+  }
+
   doc.setFontSize(18)
   doc.setTextColor(15, 15, 18)
   doc.text('Agent Audit Trail Report', 14, 20)
@@ -44,8 +55,13 @@ export function exportPdf(logs: AuditLog[], filename: string) {
   doc.text(`Policy violations: ${violations.length}`, 14, 40)
 
   doc.setFontSize(12)
-  doc.setTextColor(0, 245, 212)
-  doc.text('Chain Integrity: VERIFIED', 14, 50)
+  if (chainValid) {
+    doc.setTextColor(0, 200, 160)
+    doc.text('Chain Integrity: VERIFIED', 14, 50)
+  } else {
+    doc.setTextColor(220, 38, 38)
+    doc.text(`Chain Integrity: BROKEN at ${chainBrokenAt}`, 14, 50)
+  }
 
   const tableData = logs.map(l => [
     new Date(l.timestamp).toLocaleString(),

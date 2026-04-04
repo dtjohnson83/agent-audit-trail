@@ -1,5 +1,6 @@
 'use client'
 import { Theme } from '@/lib/theme'
+import { useChainIntegrity } from '@/hooks/useChainIntegrity'
 
 interface Props {
   theme: Theme
@@ -8,6 +9,18 @@ interface Props {
 }
 
 export default function Header({ theme: t, mode, onToggleTheme }: Props) {
+  const { status, brokenAt, refetch } = useChainIntegrity()
+
+  const chainColor = status === 'valid' ? t.success
+    : status === 'broken' ? t.critical
+    : status === 'empty' ? t.textMuted
+    : t.accent
+
+  const chainLabel = status === 'valid' ? 'CHAIN OK'
+    : status === 'broken' ? 'CHAIN BROKEN'
+    : status === 'empty' ? 'NO DATA'
+    : 'VERIFYING'
+
   return (
     <div style={{
       display: 'flex',
@@ -24,17 +37,23 @@ export default function Header({ theme: t, mode, onToggleTheme }: Props) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 8, height: 8, borderRadius: 4,
-          background: t.accent,
-          boxShadow: `0 0 8px ${t.accent}`,
-          animation: 'pulse 2s ease-in-out infinite',
+          background: chainColor,
+          boxShadow: `0 0 8px ${chainColor}`,
+          animation: status === 'verifying' ? 'pulse 1s ease-in-out infinite' : undefined,
+          transition: 'background 0.3s, box-shadow 0.3s',
         }} />
         <span style={{ fontSize: 14, fontWeight: 600, color: t.text }}>Agent Audit</span>
-        <span style={{
-          fontSize: 9, fontWeight: 600, padding: '2px 6px',
-          borderRadius: 4, background: t.accentBg,
-          border: `1px solid ${t.accentBorder}`,
-          color: t.accent, letterSpacing: '0.05em',
-        }}>LIVE</span>
+        <button
+          onClick={refetch}
+          title={brokenAt ? `Broken at: ${brokenAt}` : 'Click to re-verify chain'}
+          style={{
+            fontSize: 9, fontWeight: 700, padding: '2px 6px',
+            borderRadius: 4, background: `${chainColor}15`,
+            border: `1px solid ${chainColor}40`,
+            color: chainColor, letterSpacing: '0.06em', cursor: 'pointer',
+            transition: 'all 0.3s',
+          }}
+        >{chainLabel}</button>
       </div>
       <button
         onClick={onToggleTheme}
