@@ -33,8 +33,56 @@ const server = new McpServer({
 });
 
 // ============================================================
+// POLICY CHECK (Phase 4 — Supabase Edge Function)
+// ============================================================
+interface PolicyCheckResult {
+  allowed: boolean
+  violations: Array<{
+    rule_id: string
+    severity: string
+    enforcement: string
+    message: string
+  }>
+  blocked_by: Array<{ name: string; message: string }>
+}
+
+async function checkPolicyRemote(params: {
+  agent_id: string
+  tool_name: string
+  tool_action: string
+  parameters: Record<string, unknown>
+  data_fields_accessed: string[]
+}): Promise<PolicyCheckResult | null> {
+  const supabaseUrl = process.env.SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !serviceRoleKey) return null
+
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/check-policy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceRoleKey}`,
+      },
+      body: JSON.stringify({
+        agent_id: params.agent_id,
+        tool_name: params.tool_name,
+        tool_action: params.tool_action,
+        parameters: params.parameters,
+        data_fields_accessed: params.data_fields_accessed,
+      }),
+    })
+    if (!response.ok) return null
+    return await response.json() as PolicyCheckResult
+  } catch {
+    return null
+  }
+}
+
+// ============================================================
 // TOOL: log_action
 // The primary tool. Agents call this to log their actions.
+// Policy check happens BEFORE logging (Phase 4).
 // ============================================================
 server.tool(
   "log_action",
@@ -102,22 +150,54 @@ server.tool(
       ? args.data_fields_accessed.split(",").map((f) => f.trim())
       : [];
 
-    // Evaluate policy rules
-    const violations = policyEngine.evaluate({
+    const agentId = args.agent_id || `agent_${args.agent_name.toLowerCase().replace(/\s+/g, "_")}`;
+
+    // Phase 4: Check policy via Supabase Edge Function BEFORE logging
+    let policyBlocked = false
+    let policyViolations: Array<{ rule_id: string; rule_name: string; severity: string; action_taken: string; details: string }> = []
+
+    const remoteCheck = await checkPolicyRemote({
+      agent_id: agentId,
       tool_name: args.tool_name,
       tool_action: args.tool_action,
       parameters: parsedParams,
       data_fields_accessed: dataFields,
-    });
+    })
 
-    const shouldBlock = policyEngine.shouldBlock(violations);
+    if (remoteCheck) {
+      policyBlocked = !remoteCheck.allowed
+      policyViolations = remoteCheck.violations.map(v => ({
+        rule_id: v.rule_id,
+        rule_name: v.message || v.rule_id,
+        severity: v.severity,
+        action_taken: v.enforcement,
+        details: v.message,
+      }))
+    }
+
+    // Also check local policy engine as fallback
+    const localViolations = policyEngine.evaluate({
+      tool_name: args.tool_name,
+      tool_action: args.tool_action,
+      parameters: parsedParams,
+      data_fields_accessed: dataFields,
+    })
+    const shouldBlock = policyEngine.shouldBlock(localViolations) || policyBlocked
     const status = shouldBlock
       ? "blocked"
       : args.response_status || "success";
 
+    // Merge violations (dedup by rule_id)
+    const allViolations = [...policyViolations]
+    for (const v of localViolations) {
+      if (!allViolations.some(av => av.rule_id === v.rule_id)) {
+        allViolations.push(v)
+      }
+    }
+
     // Write immutable log entry
     const entry = logStore.writeLog({
-      agent_id: args.agent_id || `agent_${args.agent_name.toLowerCase().replace(/\s+/g, "_")}`,
+      agent_id: agentId,
       agent_name: args.agent_name,
       tool_name: args.tool_name,
       tool_action: args.tool_action,
@@ -127,7 +207,7 @@ server.tool(
       data_fields_accessed: dataFields,
       execution_duration_ms: args.execution_duration_ms || 0,
       token_cost_estimate: args.token_cost_estimate || null,
-      policy_violations: violations,
+      policy_violations: allViolations,
       metadata: parsedMetadata,
     });
 
@@ -135,11 +215,11 @@ server.tool(
       log_id: entry.id,
       timestamp: entry.timestamp,
       status: entry.response_status,
-      violations_count: violations.length,
+      violations_count: allViolations.length,
     };
 
-    if (violations.length > 0) {
-      result.violations = violations.map((v) => ({
+    if (allViolations.length > 0) {
+      result.violations = allViolations.map((v) => ({
         rule: v.rule_name,
         severity: v.severity,
         action: v.action_taken,
