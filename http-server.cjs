@@ -57,6 +57,9 @@ const WAITLIST_FILE = path.join(process.env.AUDIT_DATA_DIR || "/app/data", "wait
 
 function sortedJSON(obj) {
   if (typeof obj === "string") obj = JSON.parse(obj);
+  if (Array.isArray(obj)) {
+    return JSON.stringify(obj.map(item => typeof item === "object" && item !== null ? sortedJSON(item) : item));
+  }
   return JSON.stringify(Object.keys(obj).sort().reduce((acc, k) => {
     const v = obj[k];
     if (typeof v === "object" && v !== null) {
