@@ -1,330 +1,523 @@
-"use client";
-import { useState, useEffect } from "react";
+'use client'
+import { useState, useEffect, useMemo } from 'react'
+import { themes, Theme } from '@/lib/themes'
+import { useChainIntegrity } from '@/hooks/useChainIntegrity'
+import { supabase } from '@/lib/supabase'
+import { format } from '@/lib/date-utils'
 
-function AgentViz() {
-  const [tick, setTick] = useState(0);
-  const [tab, setTab] = useState<"without"|"with">("without");
+// ─── AnimNum ─────────────────────────────────────────────────────────────────
+function AnimNum({ value, color }: { value: number; color: string }) {
+  const [display, setDisplay] = useState(0)
   useEffect(() => {
-    const iv = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const chaosLog = [
-    { action: "Queried customer SSNs", icon: "\u26a0" },
-    { action: "Sent email to unknown address", icon: "\u26a0" },
-    { action: "Deleted 340 records", icon: "\u26a0" },
-    { action: "Charged client $4,200", icon: "\u26a0" },
-    { action: "Accessed medical history", icon: "\u26a0" },
-    { action: "Called external API with PII", icon: "\u26a0" },
-  ];
-
-  const orderLog = [
-    { action: "Queried clients table (2 fields)", status: "Logged", icon: "\u2713", color: "#4ade80" },
-    { action: "Sent email via SendGrid", status: "Logged", icon: "\u2713", color: "#4ade80" },
-    { action: "Accessed SSN field", status: "Flagged", icon: "!", color: "#fbbf24" },
-    { action: "Processed $50 refund", status: "Logged", icon: "\u2713", color: "#4ade80" },
-    { action: "Attempted DELETE on users", status: "Blocked", icon: "\u2715", color: "#f87171" },
-    { action: "Read invoice #4021", status: "Logged", icon: "\u2713", color: "#4ade80" },
-  ];
-
-  const visibleCount = 4;
-  const chaosOffset = tick % chaosLog.length;
-  const orderOffset = tick % orderLog.length;
-  const getVisible = <T,>(log: T[], offset: number): T[] => {
-    const items: T[] = [];
-    for (let i = 0; i < visibleCount; i++) items.push(log[(offset + i) % log.length]);
-    return items;
-  };
-
-  return (
-    <div>
-      <div style={{ display: "flex" }}>
-        {(["without", "with"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            flex: 1, padding: "13px 8px", fontSize: 13, fontWeight: 600,
-            background: tab === t ? (t === "without" ? "rgba(255,60,60,0.05)" : "rgba(255,255,255,0.05)") : "transparent",
-            color: tab === t ? "#fafafa" : "#404040",
-            border: `1px solid ${tab === t ? (t === "without" ? "rgba(255,60,60,0.12)" : "rgba(255,255,255,0.1)") : "rgba(255,255,255,0.04)"}`,
-            borderBottom: tab === t ? "1px solid transparent" : "1px solid rgba(255,255,255,0.04)",
-            borderRadius: t === "without" ? "10px 0 0 0" : "0 10px 0 0",
-            cursor: "pointer", transition: "all 0.2s",
-          }}>
-            {t === "without" ? "Without Audit Trail" : "With Audit Trail"}
-          </button>
-        ))}
-      </div>
-      <div style={{
-        borderRadius: "0 0 12px 12px", overflow: "hidden",
-        border: `1px solid ${tab === "without" ? "rgba(255,60,60,0.08)" : "rgba(255,255,255,0.06)"}`,
-        borderTop: "none",
-        background: tab === "without" ? "rgba(255,30,30,0.02)" : "rgba(255,255,255,0.015)",
-        transition: "all 0.3s",
-      }}>
-        <div style={{
-          padding: "10px 16px",
-          background: tab === "without" ? "rgba(255,40,40,0.05)" : "rgba(74,222,128,0.03)",
-          borderBottom: `1px solid ${tab === "without" ? "rgba(255,60,60,0.06)" : "rgba(255,255,255,0.04)"}`,
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{
-              width: 7, height: 7, borderRadius: 4,
-              background: tab === "without" ? "#ff4444" : "#4ade80",
-              animation: "pulse 1.5s ease-in-out infinite",
-              boxShadow: tab === "without" ? "0 0 8px rgba(255,68,68,0.4)" : "0 0 8px rgba(74,222,128,0.4)",
-            }} />
-            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", color: tab === "without" ? "#ff8888" : "#4ade80" }}>
-              {tab === "without" ? "NO OVERSIGHT" : "RECORDING"}
-            </span>
-          </div>
-          <span style={{ fontSize: 11, color: "#404040", fontFamily: "monospace" }}>
-            {tab === "without" ? "0 actions logged" : `${tick % 47 + 31} actions logged`}
-          </span>
-        </div>
-        <div style={{ padding: "20px 16px" }}>
-          {tab === "without" ? (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "clamp(8px, 2vw, 16px)", flexWrap: "wrap", marginBottom: 20, padding: "16px 0" }}>
-                {["Database", "Email", "Files", "CRM", "Payments", "API"].map((name, i) => {
-                  const isActive = i === tick % 6;
-                  return (
-                    <div key={name} style={{
-                      padding: "8px 14px", borderRadius: 8,
-                      background: isActive ? "rgba(255,80,80,0.08)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${isActive ? "rgba(255,80,80,0.2)" : "rgba(255,255,255,0.05)"}`,
-                      fontSize: 12, fontWeight: 500, color: isActive ? "#ff8888" : "#505050",
-                      transition: "all 0.4s ease", transform: isActive ? "scale(1.05)" : "scale(1)",
-                      position: "relative" as const,
-                    }}>
-                      {name}
-                      {isActive && (
-                        <div style={{
-                          position: "absolute" as const, top: -6, right: -6, width: 14, height: 14, borderRadius: 7,
-                          background: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 8, fontWeight: 800, color: "#000", boxShadow: "0 0 12px rgba(255,255,255,0.3)",
-                        }}>AI</div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ border: "1px solid rgba(255,60,60,0.06)", borderRadius: 8, overflow: "hidden" }}>
-                <div style={{ padding: "6px 12px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.03)", fontSize: 10, color: "#333", textTransform: "uppercase" as const, letterSpacing: "0.08em", fontWeight: 500 }}>Activity log</div>
-                {getVisible(chaosLog, chaosOffset).map((entry, i) => (
-                  <div key={`${entry.action}-${i}`} style={{
-                    padding: "10px 12px", borderBottom: i < visibleCount - 1 ? "1px solid rgba(255,255,255,0.02)" : "none",
-                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, opacity: 1 - (i * 0.15),
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 12, color: "#ff6b6b", flexShrink: 0 }}>{entry.icon}</span>
-                      <span style={{ fontSize: 13, color: "#808080", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{entry.action}</span>
-                    </div>
-                    <span style={{ fontSize: 11, color: "#ff6b6b", fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: "rgba(255,60,60,0.06)", flexShrink: 0 }}>??</span>
-                  </div>
-                ))}
-              </div>
-              <p style={{ fontSize: 12, color: "#505050", textAlign: "center" as const, marginTop: 16, fontStyle: "italic" as const }}>No record of what happened. No way to prove compliance.</p>
-            </div>
-          ) : (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "clamp(6px, 1.5vw, 14px)", marginBottom: 20, padding: "12px 0", flexWrap: "nowrap" as const, overflowX: "auto" as const }}>
-                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 4, flexShrink: 0 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 19, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fafafa" }}>AI</div>
-                  <span style={{ fontSize: 10, color: "#505050" }}>Agent</span>
-                </div>
-                <svg width="28" height="10" viewBox="0 0 28 10" style={{ flexShrink: 0 }}><line x1="0" y1="5" x2="20" y2="5" stroke="#333" strokeWidth="1" /><polyline points="18,2 24,5 18,8" fill="none" stroke="#333" strokeWidth="1" /></svg>
-                <div style={{ display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 4, flexShrink: 0, position: "relative" as const }}>
-                  <div style={{ position: "absolute" as const, inset: -8, borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", animation: "pulse 2.5s ease-in-out infinite" }} />
-                  <div style={{ padding: "10px 16px", borderRadius: 10, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", textAlign: "center" as const, position: "relative" as const }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#fafafa" }}>Audit Trail</div>
-                  </div>
-                  <span style={{ fontSize: 10, color: "#505050" }}>Logs + checks</span>
-                </div>
-                <svg width="28" height="10" viewBox="0 0 28 10" style={{ flexShrink: 0 }}><line x1="0" y1="5" x2="20" y2="5" stroke="#333" strokeWidth="1" /><polyline points="18,2 24,5 18,8" fill="none" stroke="#333" strokeWidth="1" /></svg>
-                <div style={{ display: "flex", flexDirection: "column" as const, gap: 4, flexShrink: 0 }}>
-                  {["Database", "Email", "Payments"].map(name => (
-                    <div key={name} style={{ padding: "5px 12px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "#808080", fontWeight: 500 }}>{name}</div>
-                  ))}
-                </div>
-              </div>
-              <div style={{ border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, overflow: "hidden" }}>
-                <div style={{ padding: "6px 12px", background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.03)", display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 10, color: "#404040", textTransform: "uppercase" as const, letterSpacing: "0.08em", fontWeight: 500 }}>Audit log</span>
-                  <span style={{ fontSize: 10, color: "#333", fontFamily: "monospace" }}>Live</span>
-                </div>
-                {getVisible(orderLog, orderOffset).map((entry, i) => (
-                  <div key={`${entry.action}-${i}`} style={{
-                    padding: "10px 12px", borderBottom: i < visibleCount - 1 ? "1px solid rgba(255,255,255,0.02)" : "none",
-                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, opacity: 1 - (i * 0.12),
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 10, flexShrink: 0, width: 18, height: 18, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: `${entry.color}15`, color: entry.color, fontWeight: 700 }}>{entry.icon}</span>
-                      <span style={{ fontSize: 13, color: "#a3a3a3", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{entry.action}</span>
-                    </div>
-                    <span style={{ fontSize: 11, color: entry.color, fontWeight: 600, padding: "2px 8px", borderRadius: 4, background: `${entry.color}10`, flexShrink: 0 }}>{entry.status}</span>
-                  </div>
-                ))}
-              </div>
-              <p style={{ fontSize: 12, color: "#4ade80", textAlign: "center" as const, marginTop: 16, fontWeight: 500, opacity: 0.7 }}>Every action accounted for. Exportable. Audit-ready.</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatNum({ num, label }: { num: string; label: string }) {
-  return (
-    <div style={{ textAlign: "center" as const, flex: 1 }}>
-      <div style={{ fontSize: "clamp(28px, 5vw, 40px)", fontWeight: 200, color: "#fafafa", letterSpacing: "-0.03em", lineHeight: 1 }}>{num}</div>
-      <div style={{ fontSize: 10, color: "#525252", marginTop: 6, textTransform: "uppercase" as const, letterSpacing: "0.08em", fontWeight: 500 }}>{label}</div>
-    </div>
-  );
-}
-
-export default function Landing() {
-  const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const handleSubmit = async () => {
-    if (!email.includes("@")) return;
-    try {
-      const res = await fetch("https://agent-audit-trail-production.up.railway.app/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      if (res.ok) setSubmitted(true);
-    } catch {}
-  };
-
-  const sec: React.CSSProperties = { padding: "clamp(40px, 8vw, 80px) 0" };
-  const lbl: React.CSSProperties = { fontSize: 11, color: "#404040", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 500, marginBottom: "clamp(16px, 3vw, 28px)" };
-
-  return (
-    <div style={{ minHeight: "100vh", background: "#000", color: "#e5e5e5", fontFamily: "'DM Sans', system-ui, sans-serif", overflow: "hidden" }}>
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", backgroundImage: "linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px)", backgroundSize: "60px 60px", opacity: 0.5 }} />
-      <div style={{ position: "relative", zIndex: 1, maxWidth: 900, margin: "0 auto", padding: "0 clamp(16px, 4vw, 28px)" }}>
-        <nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "18px 0", flexWrap: "wrap", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 6, height: 6, borderRadius: 3, background: "#fff", animation: "pulse 3s ease-in-out infinite" }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: "#fafafa" }}>AI Agent Audit</span>
-          </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            <a href="https://github.com/dtjohnson83/agent-audit-trail" target="_blank" rel="noopener noreferrer" style={{ color: "#525252", fontSize: 12, textDecoration: "none" }}>GitHub</a>
-            <a href="https://linkedin.com/in/danjohnsondata" target="_blank" rel="noopener noreferrer" style={{ color: "#525252", fontSize: 12, textDecoration: "none" }}>LinkedIn</a>
-            <a href="#contact" style={{ color: "#000", background: "#fff", fontSize: 11, fontWeight: 600, padding: "6px 14px", borderRadius: 6, textDecoration: "none", whiteSpace: "nowrap" }}>Get in Touch</a>
-          </div>
-        </nav>
-        <section style={{ paddingTop: "clamp(60px, 12vw, 120px)", paddingBottom: "clamp(32px, 6vw, 60px)", animation: "fadeIn 1s ease forwards" }}>
-          <p style={{ fontSize: 11, color: "#525252", textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 500, marginBottom: 16 }}>Open source MCP server</p>
-          <h1 style={{ fontSize: "clamp(32px, 7vw, 68px)", fontWeight: 300, lineHeight: 1.08, letterSpacing: "-0.04em", color: "#fafafa", marginBottom: 20, maxWidth: 600 }}>Know what your AI agents did.</h1>
-          <p style={{ fontSize: "clamp(15px, 2.5vw, 18px)", color: "#525252", maxWidth: 460, lineHeight: 1.65, fontWeight: 300, marginBottom: 32 }}>If you handle client data, you need a record of every action your AI takes. Agent Audit Trail creates that record automatically.</p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <a href="https://github.com/dtjohnson83/agent-audit-trail" target="_blank" rel="noopener noreferrer" style={{ padding: "12px 24px", borderRadius: 8, fontSize: 14, fontWeight: 600, background: "#fff", color: "#000", textDecoration: "none" }}>View on GitHub</a>
-            <a href="#how" style={{ padding: "12px 24px", borderRadius: 8, fontSize: 14, fontWeight: 400, color: "#707070", border: "1px solid rgba(255,255,255,0.1)", textDecoration: "none" }}>How it works</a>
-          </div>
-        </section>
-        <section style={sec}><p style={lbl}>See the difference</p><AgentViz /></section>
-        <section style={sec}>
-          <p style={lbl}>Think of it this way</p>
-          <div style={{ maxWidth: 600, padding: "clamp(20px, 4vw, 36px)", borderRadius: 14, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ fontSize: "clamp(16px, 2.5vw, 20px)", fontWeight: 300, color: "#a3a3a3", lineHeight: 1.7 }}>When an employee handles sensitive files, there\u2019s a paper trail. Access logs, timestamps, signatures.</p>
-            <p style={{ fontSize: "clamp(16px, 2.5vw, 20px)", fontWeight: 300, color: "#a3a3a3", lineHeight: 1.7, marginTop: 14 }}>AI agents don\u2019t leave that trail.</p>
-            <p style={{ fontSize: "clamp(17px, 2.8vw, 22px)", fontWeight: 400, color: "#fafafa", lineHeight: 1.7, marginTop: 18 }}>Agent Audit Trail is the sign-in sheet for your AI. Every action recorded. Every data access logged. Nothing editable after the fact.</p>
-          </div>
-        </section>
-        <section id="how" style={sec}>
-          <p style={lbl}>How it works</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-            {[{ n: "01", t: "Install", d: "Add one line to your agent config. No code changes, no infrastructure." }, { n: "02", t: "Work normally", d: "Your agents call tools the same way. Everything is recorded in the background." }, { n: "03", t: "Review anytime", d: "Query logs, check violations, export reports when a client or regulator asks." }].map((s, i) => (
-              <div key={i} style={{ padding: 20, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                <span style={{ fontSize: 11, color: "#333", fontFamily: "'JetBrains Mono', monospace" }}>{s.n}</span>
-                <h3 style={{ fontSize: 15, fontWeight: 600, color: "#fafafa", marginTop: 8, marginBottom: 6 }}>{s.t}</h3>
-                <p style={{ fontSize: 13, color: "#525252", lineHeight: 1.6, fontWeight: 300 }}>{s.d}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section style={sec}>
-          <p style={lbl}>What the policy engine catches</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16 }}>
-            {[{ l: "PII Access", d: "Agent touched email, SSN, phone, or address fields.", t: "HIGH" }, { l: "Financial Thresholds", d: "Charge, refund, or transfer over your set limit.", t: "HIGH" }, { l: "Destructive Actions", d: "DELETE, DROP, or TRUNCATE in a database call.", t: "CRITICAL" }].map((item, i) => (
-              <div key={i} style={{ padding: 20, borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#fafafa" }}>{item.l}</span>
-                  <span style={{ fontSize: 9, fontWeight: 600, padding: "2px 6px", borderRadius: 4, background: "rgba(255,255,255,0.06)", color: item.t === "CRITICAL" ? "#e5e5e5" : "#707070", letterSpacing: "0.05em" }}>{item.t}</span>
-                </div>
-                <p style={{ fontSize: 13, color: "#525252", lineHeight: 1.6, fontWeight: 300 }}>{item.d}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section style={sec}>
-          <p style={lbl}>Who this is for</p>
-          <div style={{ maxWidth: 540 }}>
-            {["Financial advisors protecting client portfolio data.", "Law firms proving AI didn\u2019t expose privileged info.", "HR teams using AI screening under anti-discrimination rules.", "Insurance agencies processing claims with AI.", "Accounting firms where every data access must be traceable.", "Anyone handling other people\u2019s sensitive information."].map((text, i) => (<div key={i} style={{ padding: "12px 0", borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.03)" : "none", display: "flex", gap: 12 }}>
-              <span style={{ color: "#404040", fontSize: 11, fontFamily: "'JetBrains Mono', monospace", flexShrink: 0, paddingTop: 2 }}>{String(i + 1).padStart(2, "0")}</span>
-              <span style={{ fontSize: 14, color: "#a3a3a3", lineHeight: 1.55, fontWeight: 300 }}>{text}</span>
-            </div>
-            ))}
-          </div>
-        </section>
-        <section style={{ padding: "clamp(32px, 6vw, 60px) 0" }}>
-          <div style={{ display: "flex", justifyContent: "space-around", maxWidth: 400, padding: "28px 0", borderTop: "1px solid rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-            <StatNum num="10" label="MCP Tools" />
-            <StatNum num="3" label="Default Rules" />
-            <StatNum num="1" label="Line to Install" />
-          </div>
-        </section>
-        <section style={{ padding: "clamp(24px, 4vw, 40px) 0 clamp(40px, 8vw, 80px)" }}>
-          <p style={lbl}>Installation</p>
-          <div style={{ maxWidth: 460, borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
-            <div style={{ padding: "8px 14px", borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", gap: 5, alignItems: "center" }}>
-              <div style={{ width: 7, height: 7, borderRadius: 4, background: "#333" }} />
-              <div style={{ width: 7, height: 7, borderRadius: 4, background: "#333" }} />
-              <div style={{ width: 7, height: 7, borderRadius: 4, background: "#333" }} />
-              <span style={{ fontSize: 10, color: "#333", marginLeft: 6, fontFamily: "'JetBrains Mono', monospace" }}>config.json</span>
-            </div>
-            <pre style={{ padding: "14px 16px", margin: 0, fontSize: 12, lineHeight: 1.8, overflowX: "auto", fontFamily: "'JetBrains Mono', monospace", color: "#707070", fontWeight: 300 }}>
-{`{
-  "mcpServers": {
-    "audit-trail": {
-      "command": "npx",
-      "args": ["agent-audit-trail"]
+    const target = value
+    const dur = 800
+    const t0 = Date.now()
+    const tick = () => {
+      const p = Math.min((Date.now() - t0) / dur, 1)
+      setDisplay(Math.round((1 - Math.pow(1 - p, 3)) * target))
+      if (p < 1) requestAnimationFrame(tick)
     }
+    tick()
+  }, [value])
+  return <span style={{ color, fontVariantNumeric: 'tabular-nums' }}>{display}</span>
+}
+
+// ─── ThemeToggle ──────────────────────────────────────────────────────────────
+function ThemeToggle({ isDark, onToggle }: { isDark: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} style={{
+      width: 44, height: 26, borderRadius: 13, border: 'none', cursor: 'pointer',
+      background: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+      position: 'relative', transition: 'background 0.3s ease',
+      display: 'flex', alignItems: 'center', padding: '0 3px',
+    }}>
+      <div style={{
+        width: 20, height: 20, borderRadius: '50%',
+        background: isDark ? '#f4f4f5' : '#111118',
+        transform: isDark ? 'translateX(0)' : 'translateX(18px)',
+        transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: isDark ? '0 0 8px rgba(255,255,255,0.2)' : '0 1px 4px rgba(0,0,0,0.15)',
+      }}>
+        <span style={{ fontSize: 10, lineHeight: 1 }}>{isDark ? '🌙' : '☀️'}</span>
+      </div>
+    </button>
+  )
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+function Header({ t, isDark, onToggle }: { t: Theme; isDark: boolean; onToggle: () => void }) {
+  const { status, brokenAt, refetch } = useChainIntegrity()
+  const chainColor = status === 'valid' ? t.success : status === 'broken' ? t.critical : status === 'empty' ? t.textMuted : t.accent
+  const chainLabel = status === 'valid' ? 'CHAIN OK' : status === 'broken' ? 'BROKEN' : status === 'empty' ? 'NO DATA' : 'VERIFYING'
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '16px 18px 14px',
+      background: t.surfaceSolid, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+      borderBottom: `1px solid ${t.border}`, position: 'sticky', top: 0, zIndex: 50,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: isDark ? 'linear-gradient(135deg, #00f5d4 0%, #4cc9f0 50%, #7b61ff 100%)' : 'linear-gradient(135deg, #0a9b80 0%, #2563eb 50%, #7c3aed 100%)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: isDark ? '0 0 24px rgba(0,245,212,0.25)' : '0 2px 12px rgba(10,155,128,0.2)',
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isDark ? '#030306' : '#fff'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
+        <div>
+          <div style={{
+            fontSize: 17, fontWeight: 700, letterSpacing: '-0.03em',
+            background: isDark ? 'linear-gradient(135deg, #f4f4f5 0%, #a1a1aa 100%)' : 'linear-gradient(135deg, #111118 0%, #5a5a6e 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          }}>Agent Audit Trail</div>
+          <div style={{ fontSize: 9, color: t.textGhost, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 500, marginTop: 1 }}>DANZUS HOLDINGS</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={refetch} title={brokenAt ? `Broken: ${brokenAt}` : 'Re-verify chain'} style={{
+          display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px',
+          borderRadius: 20, background: `${chainColor}15`, border: `1px solid ${chainColor}40`, cursor: 'pointer',
+        }}>
+          <div style={{
+            width: 6, height: 6, borderRadius: '50%', background: chainColor,
+            boxShadow: `0 0 8px ${chainColor}90`,
+            animation: status === 'verifying' ? 'glow-pulse 1s ease-in-out infinite' : undefined,
+          }} />
+          <span style={{ fontSize: 10, color: chainColor, fontWeight: 600, letterSpacing: '0.04em' }}>{chainLabel}</span>
+        </button>
+        <ThemeToggle isDark={isDark} onToggle={onToggle} />
+      </div>
+    </div>
+  )
+}
+
+// ─── Stats ───────────────────────────────────────────────────────────────────
+function Stats({ t, logs }: { t: Theme; logs: any[] }) {
+  const v = logs.filter((l) => (l.violations?.length || 0) > 0)
+  const stats = {
+    total: logs.length,
+    violations: v.length,
+    criticals: v.filter((l) => l.violations?.some((x: any) => x.severity === 'critical')).length,
+    errors: logs.filter((l) => l.status === 'error').length,
+    cost: logs.reduce((s: number, l: any) => s + (l.token_cost || 0), 0),
   }
-}`}
-            </pre>
+  const items = [
+    { label: 'ACTIONS', value: stats.total, color: t.accent },
+    { label: 'VIOLATIONS', value: stats.violations, color: t.high },
+    { label: 'CRITICAL', value: stats.criticals, color: t.critical },
+    { label: 'ERRORS', value: stats.errors, color: t.error },
+    { label: 'COST', value: stats.cost, color: t.costColor, isCost: true },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 6, padding: '6px 18px 14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      {items.map((s, i) => (
+        <div key={i} style={{
+          minWidth: 100, flexShrink: 0, padding: '12px 14px', borderRadius: 14,
+          background: t.surface, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          border: `1px solid ${t.border}`, position: 'relative', overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: '20%', right: '20%', height: 1, background: `linear-gradient(90deg, transparent, ${s.color}40, transparent)` }} />
+          <div style={{ fontSize: 8, color: t.textMuted, letterSpacing: '0.14em', fontWeight: 600, marginBottom: 6 }}>{s.label}</div>
+          <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>
+            {s.isCost ? <span style={{ color: s.color }}>${s.value.toFixed(2)}</span> : <AnimNum value={s.value} color={s.color} />}
           </div>
-        </section>
-        <section id="contact" style={{ ...sec, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-          <div style={{ maxWidth: 440 }}>
-            <h2 style={{ fontSize: "clamp(24px, 4vw, 32px)", fontWeight: 300, letterSpacing: "-0.03em", color: "#fafafa", marginBottom: 14, lineHeight: 1.2 }}>Interested?</h2>
-            <p style={{ fontSize: 14, color: "#525252", lineHeight: 1.6, fontWeight: 300, marginBottom: 28 }}>The MCP server is free and open source. If you want help setting it up, or early access to the hosted dashboard, reach out.</p>
-            <a href="https://linkedin.com/in/danjohnsondata" target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 8, fontSize: 14, fontWeight: 600, background: "#fff", color: "#000", textDecoration: "none", marginBottom: 24 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="#000"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" /></svg>
-              Connect on LinkedIn
-            </a>
-            <div>
-              {!submitted ? (
-                <div><p style={{ fontSize: 12, color: "#404040", marginBottom: 10 }}>Or join the waitlist:</p>
-                  <div style={{ display: "flex", gap: 8, maxWidth: 340 }}>
-                    <input type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} placeholder="you@company.com" style={{ flex: 1, padding: "9px 12px", borderRadius: 8, fontSize: 13, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", color: "#e5e5e5", outline: "none", fontFamily: "'DM Sans', sans-serif", minWidth: 0 }} />
-                    <button onClick={handleSubmit} style={{ padding: "9px 16px", borderRadius: 8, fontSize: 12, fontWeight: 600, background: "rgba(255,255,255,0.06)", color: "#a3a3a3", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", whiteSpace: "nowrap" }}>Join</button>
-                  </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── AgentFilter ─────────────────────────────────────────────────────────────
+function AgentFilter({ t, agents, selected, onSelect }: { t: Theme; agents: any[]; selected: string; onSelect: (id: string) => void }) {
+  const allAgents = [{ id: 'all', name: 'All Agents', status: null }, ...agents]
+  return (
+    <div style={{ display: 'flex', gap: 6, padding: '0 18px 10px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      {allAgents.map((a) => {
+        const active = selected === a.id
+        return (
+          <button key={a.id} onClick={() => onSelect(a.id)} style={{
+            padding: '7px 14px', borderRadius: 24, border: 'none', cursor: 'pointer',
+            fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,
+            background: active ? t.accentBg : t.surface,
+            color: active ? t.accent : t.textMuted,
+            boxShadow: active ? `0 0 12px ${t.accent}15, inset 0 0 0 1px ${t.accentBorder}` : `inset 0 0 0 1px ${t.border}`,
+            transition: 'all 0.2s ease',
+          }}>
+            {a.name}
+            {a.status && (
+              <span style={{
+                display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
+                background: a.status === 'active' ? t.accent : t.textGhost,
+                marginLeft: 7, verticalAlign: 'middle',
+                boxShadow: a.status === 'active' ? `0 0 4px ${t.accent}80` : 'none',
+              }} />
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Tabs ────────────────────────────────────────────────────────────────────
+function Tabs({ t, tab, onTab }: { t: Theme; tab: string; onTab: (t: string) => void }) {
+  const tabs = ['timeline', 'agents', 'policies']
+  return (
+    <div style={{ display: 'flex', margin: '0 18px 14px', borderRadius: 14, overflow: 'hidden', background: t.surface, border: `1px solid ${t.border}` }}>
+      {tabs.map((tb) => {
+        const active = tab === tb
+        return (
+          <button key={tb} onClick={() => onTab(tb)} style={{
+            flex: 1, padding: '11px 0', border: 'none', cursor: 'pointer',
+            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em',
+            background: active ? t.accentBg : 'transparent',
+            color: active ? t.accent : t.textMuted, position: 'relative', transition: 'all 0.2s ease',
+          }}>
+            {tb}
+            {active && <div style={{ position: 'absolute', bottom: 0, left: '25%', right: '25%', height: 2, background: `linear-gradient(90deg, transparent, ${t.accent}, transparent)`, borderRadius: 1 }} />}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── TimelineTab ─────────────────────────────────────────────────────────────
+function TimelineTab({ t, logs }: { t: Theme; logs: any[] }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [reviewModal, setReviewModal] = useState<any>(null)
+  const [reviewNote, setReviewNote] = useState('')
+  const [reviewStatus, setReviewStatus] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const sCol = (s: string) => ({ critical: t.critical, high: t.high, medium: t.medium }[s] || t.textMuted)
+  const stCol = (s: string) => ({ success: t.success, error: t.error, flagged: t.flagged }[s] || t.textMuted)
+
+  const toolBreakdown = useMemo(() => {
+    const m: Record<string, number> = {}
+    logs.forEach((l) => { m[l.tool_name] = (m[l.tool_name] || 0) + 1 })
+    return Object.entries(m).sort((a, b) => b[1] - a[1])
+  }, [logs])
+
+  const saveReview = async () => {
+    if (!reviewModal || !reviewStatus) return
+    setSaving(true)
+    await supabase.from('review_events').insert({ log_id: reviewModal.id, status: reviewStatus, note: reviewNote })
+    setSaving(false)
+    setReviewModal(null)
+    setReviewNote('')
+    setReviewStatus('')
+  }
+
+  return (
+    <>
+      {logs.map((log, i) => {
+        const hasV = (log.violations?.length || 0) > 0
+        const isErr = log.status === 'error'
+        const isOpen = open === log.id
+        const accent = hasV ? sCol(log.violations[0].severity) : isErr ? t.error : t.accent
+        const violMsg = log.violations?.[0]?.message || log.violations?.[0]?.msg || ''
+
+        return (
+          <div key={log.id} onClick={() => setOpen(isOpen ? null : log.id)} style={{ display: 'flex', gap: 12, cursor: 'pointer', animation: `fadeSlide 0.4s ease ${i * 0.04}s both` }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 18, paddingTop: 3 }}>
+              <div style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0, background: accent, boxShadow: `0 0 8px ${accent}50, 0 0 16px ${accent}20` }} />
+              {i < logs.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 24, background: `linear-gradient(to bottom, ${accent}30, transparent)`, marginTop: 4 }} />}
+            </div>
+            <div style={{
+              flex: 1, marginBottom: 10, padding: '12px 14px', borderRadius: 14, position: 'relative', overflow: 'hidden',
+              background: isOpen ? t.surfaceHover : t.cardBg, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+              border: `1px solid ${isOpen ? `${accent}25` : t.border}`,
+              boxShadow: isOpen ? `0 4px 24px ${accent}08` : 'none', transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+            }}>
+              {(hasV || isErr) && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${accent}, transparent)`, opacity: 0.5 }} />}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: t.text, letterSpacing: '-0.02em' }}>{log.tool_name}</span>
+                  <span style={{ fontSize: 11, color: t.textMuted, fontWeight: 500 }}>.{log.action}</span>
                 </div>
-              ) : (
-                <p style={{ fontSize: 13, color: "#707070" }}>Added. We\u2019ll be in touch.</p>
+                <span style={{ fontSize: 8, padding: '3px 8px', borderRadius: 6, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: stCol(log.status), background: `${stCol(log.status)}12`, border: `1px solid ${stCol(log.status)}20` }}>{log.status}</span>
+              </div>
+              <div style={{ fontSize: 12, color: t.textSecondary, marginTop: 5, lineHeight: 1.45 }}>{log.summary || log.agent_name}</div>
+              {hasV && (
+                <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 8, background: `${sCol(log.violations[0].severity)}08`, border: `1px solid ${sCol(log.violations[0].severity)}18`, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={sCol(log.violations[0].severity)} style={{ marginTop: 1, flexShrink: 0 }}><path d="M12 2L2 20h20L12 2zm0 6v6m0 2v2" /></svg>
+                  <span style={{ fontSize: 11, color: sCol(log.violations[0].severity), fontWeight: 600, lineHeight: 1.4 }}>{violMsg}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 10, color: t.textGhost, fontWeight: 500 }}>
+                <span style={{ color: t.textMuted }}>{log.agent_name}</span>
+                <span>·</span>
+                <span>{log.timestamp ? format(new Date(log.timestamp)) : '—'}</span>
+                <span>·</span>
+                <span>{log.duration_ms ? `${log.duration_ms}ms` : '—'}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'monospace', fontSize: 9, letterSpacing: '0.02em' }}>⛓ {String(log.hash || '').slice(0, 8)}</span>
+              </div>
+              {isOpen && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${t.border}`, animation: 'fadeSlide 0.3s ease' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    {[
+                      { label: 'ENTRY', val: log.id, mono: true },
+                      { label: 'COST', val: log.token_cost != null ? `$${log.token_cost.toFixed(4)}` : '—', color: t.costColor },
+                      { label: 'HASH', val: String(log.hash || '—'), mono: true, color: t.accent },
+                      { label: 'PREV HASH', val: String(log.previous_hash || '—'), mono: true, color: t.textMuted },
+                    ].map((f, fi) => (
+                      <div key={fi}>
+                        <div style={{ fontSize: 8, color: t.textGhost, letterSpacing: '0.12em', fontWeight: 700, marginBottom: 3 }}>{f.label}</div>
+                        <div style={{ fontSize: 10, color: f.color || t.textSecondary, fontFamily: f.mono ? 'monospace' : 'inherit', wordBreak: 'break-all' }}>{f.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {log.parameters && Object.keys(log.parameters).length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 8, color: t.textGhost, letterSpacing: '0.12em', fontWeight: 700, marginBottom: 4 }}>PARAMETERS</div>
+                      <pre style={{ margin: 0, padding: 10, borderRadius: 8, background: t.codeBg, border: `1px solid ${t.codeBorder}`, fontSize: 10, color: t.textSecondary, fontFamily: 'monospace', overflow: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.5 }}>{JSON.stringify(log.parameters, null, 2)}</pre>
+                    </div>
+                  )}
+                  {hasV && (
+                    <button onClick={(e) => { e.stopPropagation(); setReviewModal(log) }} style={{ marginTop: 10, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: t.accentBg, color: t.accent, fontSize: 10, fontWeight: 600, boxShadow: `0 0 8px ${t.accent}15` }}>
+                      Review Violation
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>
-        </section>
-        <footer style={{ padding: "20px 0", borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <span style={{ fontSize: 10, color: "#262626" }}>DANZUS Holdings LLC</span>
-          <span style={{ fontSize: 10, color: "#262626" }}>Built for professionals who protect client data</span>
-        </footer>
-      </div>
+        )
+      })}
+
+      {toolBreakdown.length > 0 && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          maxWidth: 440, width: 'calc(100% - 36px)', padding: '10px 14px', borderRadius: 16,
+          background: t.floatBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+          border: `1px solid ${t.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          display: 'flex', gap: 6, alignItems: 'center', overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+        }}>
+          <span style={{ fontSize: 8, color: t.textGhost, fontWeight: 700, letterSpacing: '0.1em', whiteSpace: 'nowrap', marginRight: 4 }}>TOOLS</span>
+          {toolBreakdown.map(([tool, count]) => (
+            <div key={tool} style={{ padding: '4px 10px', borderRadius: 8, flexShrink: 0, background: t.surface, border: `1px solid ${t.border}`, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 10, color: t.textMuted, fontWeight: 500 }}>{tool}</span>
+              <span style={{ fontSize: 10, color: t.accent, fontWeight: 800 }}>{count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {reviewModal && (
+        <div onClick={() => setReviewModal(null)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 420, borderRadius: 20, padding: 24, background: t.bg, border: `1px solid ${t.border}`, boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: t.text, marginBottom: 4 }}>Review Violation</div>
+            <div style={{ fontSize: 11, color: t.textMuted, marginBottom: 16 }}>{reviewModal.tool_name}.{reviewModal.action}</div>
+            {reviewModal.violations?.map((v: any, i: number) => (
+              <div key={i} style={{ padding: '8px 12px', borderRadius: 8, marginBottom: 12, background: `${sCol(v.severity)}08`, border: `1px solid ${sCol(v.severity)}18` }}>
+                <span style={{ fontSize: 10, color: sCol(v.severity), fontWeight: 700 }}>{v.severity?.toUpperCase()}</span>
+                <span style={{ fontSize: 11, color: t.textSecondary, marginLeft: 8 }}>{v.message || v.msg}</span>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {['reviewed', 'escalated', 'false_positive'].map((s) => (
+                <button key={s} onClick={() => setReviewStatus(s)} style={{
+                  flex: 1, padding: '7px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 10, fontWeight: 600, textTransform: 'capitalize',
+                  background: reviewStatus === s ? t.accentBg : t.surface, color: reviewStatus === s ? t.accent : t.textMuted,
+                  boxShadow: reviewStatus === s ? `0 0 8px ${t.accent}15` : 'none',
+                }}>{s.replace('_', ' ')}</button>
+              ))}
+            </div>
+            <textarea value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Add a note (optional)..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.codeBg, color: t.text, fontSize: 12, fontFamily: 'inherit', resize: 'none', outline: 'none', marginBottom: 12 }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setReviewModal(null)} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1px solid ${t.border}`, background: t.surface, color: t.textMuted, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={saveReview} disabled={!reviewStatus || saving} style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', cursor: 'pointer', background: t.accent, color: '#030306', fontSize: 12, fontWeight: 700, opacity: !reviewStatus || saving ? 0.5 : 1 }}>{saving ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─── AgentsTab ───────────────────────────────────────────────────────────────
+function AgentsTab({ t, logs }: { t: Theme; logs: any[] }) {
+  const agents = useMemo(() => {
+    const m: Record<string, any> = {}
+    logs.forEach((l) => {
+      if (!m[l.agent_name]) m[l.agent_name] = { id: l.agent_id || l.agent_name, name: l.agent_name, actions: 0, violations: 0, last: null }
+      m[l.agent_name].actions++
+      if ((l.violations?.length || 0) > 0) m[l.agent_name].violations++
+      if (!m[l.agent_name].last || l.timestamp > m[l.agent_name].last) m[l.agent_name].last = l.timestamp
+    })
+    return Object.values(m)
+  }, [logs])
+  const ago = (iso: string | null) => {
+    if (!iso) return '—'
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+    return m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`
+  }
+  return (
+    <div style={{ paddingBottom: 60 }}>
+      {agents.map((a, i) => (
+        <div key={a.id} style={{ marginBottom: 10, padding: 16, borderRadius: 16, background: t.surface, backdropFilter: 'blur(8px)', border: `1px solid ${t.border}`, animation: `fadeSlide 0.4s ease ${i * 0.08}s both`, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: t.accentBg, border: `1px solid ${t.accentBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🤖</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: t.text, letterSpacing: '-0.02em' }}>{a.name}</div>
+                <div style={{ fontSize: 10, fontFamily: 'monospace', color: t.textGhost, marginTop: 1 }}>{a.id}</div>
+              </div>
+            </div>
+            <div style={{ padding: '4px 10px', borderRadius: 20, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', background: t.accentBg, color: t.accent, border: `1px solid ${t.accentBorder}` }}>active</div>
+          </div>
+          <div style={{ display: 'flex', gap: 0 }}>
+            {[
+              { label: 'ACTIONS', val: a.actions, color: t.accent },
+              { label: 'VIOLATIONS', val: a.violations, color: a.violations > 0 ? t.high : t.textGhost },
+              { label: 'LAST SEEN', val: ago(a.last), isText: true },
+            ].map((s, si) => (
+              <div key={si} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: 7, color: t.textGhost, letterSpacing: '0.14em', fontWeight: 700, marginBottom: 4 }}>{s.label}</div>
+                <div style={{ fontSize: s.isText ? 13 : 20, fontWeight: 800, color: s.isText ? t.textSecondary : s.color, letterSpacing: '-0.02em' }}>{s.val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
-  );
+  )
+}
+
+// ─── PoliciesTab ─────────────────────────────────────────────────────────────
+function PoliciesTab({ t }: { t: Theme }) {
+  const [policies, setPolicies] = useState<any[]>([])
+  const [editing, setEditing] = useState<any>(null)
+  const [showEditor, setShowEditor] = useState(false)
+  const sCol = (s: string) => ({ critical: t.critical, high: t.high, medium: t.medium, low: t.textMuted }[s] || t.textMuted)
+
+  useEffect(() => { supabase.from('policy_rules').select('*').then(({ data }) => setPolicies(data || [])) }, [])
+
+  return (
+    <div style={{ paddingBottom: 60 }}>
+      {policies.map((p, i) => (
+        <div key={p.id} style={{ marginBottom: 10, padding: 16, borderRadius: 16, background: t.surface, backdropFilter: 'blur(8px)', border: `1px solid ${t.border}`, animation: `fadeSlide 0.4s ease ${i * 0.08}s both`, position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', background: `linear-gradient(to bottom, ${sCol(p.severity)}, transparent)`, borderRadius: '3px 0 0 3px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingLeft: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: t.text, letterSpacing: '-0.02em' }}>{p.name}</div>
+            <div style={{ padding: '3px 10px', borderRadius: 6, fontSize: 8, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', background: `${sCol(p.severity)}12`, color: sCol(p.severity), border: `1px solid ${sCol(p.severity)}20` }}>{p.severity}</div>
+          </div>
+          <div style={{ fontSize: 12, color: t.textSecondary, lineHeight: 1.45, marginBottom: 10, paddingLeft: 8 }}>{p.description}</div>
+          {p.rule && <div style={{ padding: '8px 10px', borderRadius: 8, background: t.codeBg, border: `1px solid ${t.codeBorder}`, fontFamily: 'monospace', fontSize: 10, color: t.textMuted, wordBreak: 'break-all', lineHeight: 1.5, marginBottom: 10, marginLeft: 8 }}>{p.rule}</div>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 8 }}>
+            <span style={{ fontSize: 10, color: t.textGhost }}><strong style={{ color: (p.trigger_count || 0) > 0 ? sCol(p.severity) : t.textGhost }}>{p.trigger_count || 0}</strong> triggers</span>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.accent, boxShadow: `0 0 6px ${t.accent}60` }} />
+          </div>
+        </div>
+      ))}
+      <button onClick={() => setShowEditor(true)} style={{
+        width: '100%', marginTop: 4, padding: '10px', borderRadius: 12, border: `1px solid ${t.border}`,
+        background: t.accentBg, color: t.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        boxShadow: `0 0 8px ${t.accent}10`,
+      }}>+ Add Policy</button>
+    </div>
+  )
+}
+
+// ─── Grain overlay ───────────────────────────────────────────────────────────
+function Grain({ t, isDark }: { t: Theme; isDark: boolean }) {
+  if (!isDark) return null
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, opacity: t.grain, pointerEvents: 'none', mixBlendMode: 'overlay',
+      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
+    }} />
+  )
+}
+
+// ─── Glow orbs ───────────────────────────────────────────────────────────────
+function GlowOrbs({ t, isDark }: { t: Theme; isDark: boolean }) {
+  if (!isDark) return null
+  return (
+    <>
+      <div style={{ position: 'fixed', top: -120, left: -80, width: 320, height: 320, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,245,212,0.07) 0%, transparent 70%)', pointerEvents: 'none', filter: 'blur(40px)', opacity: t.glowOpacity }} />
+      <div style={{ position: 'fixed', top: 200, right: -100, width: 280, height: 280, borderRadius: '50%', background: 'radial-gradient(circle, rgba(76,201,240,0.05) 0%, transparent 70%)', pointerEvents: 'none', filter: 'blur(50px)', opacity: t.glowOpacity }} />
+      <div style={{ position: 'fixed', bottom: 100, left: -60, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,59,92,0.04) 0%, transparent 70%)', pointerEvents: 'none', filter: 'blur(40px)', opacity: t.glowOpacity }} />
+    </>
+  )
+}
+
+// ─── Main ────────────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const [mode, setMode] = useState<'dark' | 'light'>('dark')
+  const [tab, setTab] = useState('timeline')
+  const [agent, setAgent] = useState('all')
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setTimeout(() => setMounted(true), 50) }, [])
+
+  const t = themes[mode]
+  const isDark = mode === 'dark'
+
+  const [logs, setLogs] = useState<any[]>([])
+  useEffect(() => {
+    supabase
+      .from('audit_logs')
+      .select('*')
+      .order('entry_id', { ascending: false })
+      .limit(50)
+      .then(({ data }) => setLogs(data || []))
+  }, [])
+
+  const filtered = useMemo(() => agent === 'all' ? logs : logs.filter((l) => l.agent_id === agent || l.agent_name === agent), [logs, agent])
+
+  const agents = useMemo(() => {
+    const m: Record<string, any> = {}
+    logs.forEach((l) => {
+      if (!m[l.agent_name]) m[l.agent_name] = { id: l.agent_id || l.agent_name, name: l.agent_name, status: 'active' }
+    })
+    return Object.values(m)
+  }, [logs])
+
+  return (
+    <div style={{
+      background: t.bg, minHeight: '100vh', color: t.text,
+      fontFamily: "'Geist', 'SF Pro Display', system-ui, sans-serif",
+      maxWidth: 480, margin: '0 auto', position: 'relative', overflow: 'hidden',
+      transition: 'background 0.4s ease, color 0.4s ease',
+    }}>
+      <GlowOrbs t={t} isDark={isDark} />
+      <Grain t={t} isDark={isDark} />
+
+      <div style={{
+        position: 'relative', zIndex: 1,
+        opacity: mounted ? 1 : 0, transform: mounted ? 'translateY(0)' : 'translateY(8px)',
+        transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+      }}>
+        <Header t={t} isDark={isDark} onToggle={() => setMode(isDark ? 'light' : 'dark')} />
+        <Stats t={t} logs={filtered} />
+        <AgentFilter t={t} agents={agents} selected={agent} onSelect={setAgent} />
+        <Tabs t={t} tab={tab} onTab={setTab} />
+
+        <div style={{ padding: '0 18px 50px' }}>
+          {tab === 'timeline' && <TimelineTab t={t} logs={filtered} />}
+          {tab === 'agents' && <AgentsTab t={t} logs={logs} />}
+          {tab === 'policies' && <PoliciesTab t={t} />}
+        </div>
+      </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&display=swap');
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { display: none; }
+        @keyframes glow-pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @keyframes fadeSlide {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  )
 }
