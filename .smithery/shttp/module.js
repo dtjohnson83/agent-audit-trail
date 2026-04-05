@@ -30113,6 +30113,9 @@ var StdioServerTransport = class {
   }
 };
 
+// dist/log-store.js
+import { createHash } from "crypto";
+
 // node_modules/uuid/dist-node/stringify.js
 var byteToHex = [];
 for (let i = 0; i < 256; ++i) {
@@ -30167,9 +30170,30 @@ function v4(options, buf, offset) {
 }
 var v4_default = v4;
 
-// src/log-store.ts
+// dist/log-store.js
 import * as fs from "fs";
 import * as path from "path";
+var GENESIS_HASH = "genesis";
+function computeEntryHash(previousHash, entry) {
+  const payload = [
+    previousHash ?? GENESIS_HASH,
+    entry.id,
+    entry.timestamp,
+    entry.agent_id,
+    entry.agent_name,
+    entry.tool_name,
+    entry.tool_action,
+    JSON.stringify(entry.parameters ?? {}),
+    entry.response_summary ?? "",
+    entry.response_status ?? "success",
+    JSON.stringify(entry.data_fields_accessed ?? []),
+    String(entry.execution_duration_ms ?? 0),
+    String(entry.token_cost_estimate ?? ""),
+    JSON.stringify(entry.policy_violations ?? []),
+    JSON.stringify(entry.metadata ?? {})
+  ].join("|");
+  return createHash("sha256").update(payload).digest("hex");
+}
 var LogStore = class {
   logs = [];
   agents = /* @__PURE__ */ new Map();
@@ -30181,19 +30205,78 @@ var LogStore = class {
     }
   }
   /**
-   * Write an immutable log entry. Once written, entries cannot be
-   * modified or deleted (compliance requirement).
+   * Write an immutable log entry.
+   *
+   * The entry is cryptographically chained to the previous entry.
+   * Once written, the chain cannot be broken without detection.
+   *
+   * @returns The written entry with hash and previous_hash populated.
    */
   writeLog(entry) {
-    const fullEntry = {
+    const id = v4_default();
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const previousHash = this.logs.length > 0 ? this.logs[this.logs.length - 1].hash : null;
+    const entryData = {
       ...entry,
-      id: v4_default(),
-      timestamp: (/* @__PURE__ */ new Date()).toISOString()
+      id,
+      timestamp,
+      previous_hash: previousHash
+    };
+    const hash2 = computeEntryHash(previousHash, entryData);
+    const fullEntry = {
+      ...entryData,
+      hash: hash2
     };
     this.logs.push(fullEntry);
     this.updateAgentActivity(entry.agent_id, entry.agent_name);
     this.persistToDisk();
     return fullEntry;
+  }
+  /**
+   * Verify the integrity of the entire audit chain.
+   *
+   * Returns which entry (if any) is the first to fail verification.
+   * A valid chain returns { valid: true, entries_checked, broken_at: null, error: null }.
+   *
+   * Call this after loading from disk, before serving compliance reports.
+   */
+  verifyChain() {
+    if (this.logs.length === 0) {
+      return {
+        valid: true,
+        entries_checked: 0,
+        broken_at: null,
+        error: null
+      };
+    }
+    const reversed = [...this.logs].reverse();
+    for (let i = 0; i < reversed.length; i++) {
+      const entry = reversed[i];
+      const expectedPreviousHash = i === 0 ? null : reversed[i - 1].hash;
+      if (entry.previous_hash !== expectedPreviousHash) {
+        return {
+          valid: false,
+          entries_checked: i,
+          broken_at: entry.id,
+          error: `Entry ${i} (${entry.id}): previous_hash mismatch. Expected ${expectedPreviousHash}, got ${entry.previous_hash}.`
+        };
+      }
+      const recomputedHash = computeEntryHash(entry.previous_hash, entry);
+      if (recomputedHash !== entry.hash) {
+        return {
+          valid: false,
+          entries_checked: i,
+          broken_at: entry.id,
+          error: `Entry ${i} (${entry.id}): hash mismatch. Entry contents have been modified after writing.`
+        };
+      }
+    }
+    return {
+      valid: true,
+      entries_checked: this.logs.length,
+      broken_at: null,
+      error: null
+    };
   }
   /**
    * Query logs with filtering options.
@@ -30218,9 +30301,7 @@ var LogStore = class {
     if (options.end_date) {
       results = results.filter((l) => l.timestamp <= options.end_date);
     }
-    results.sort(
-      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
+    results.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     const offset = options.offset || 0;
     const limit = options.limit || 50;
     return results.slice(offset, offset + limit);
@@ -30236,30 +30317,17 @@ var LogStore = class {
    */
   getSummary() {
     const now = /* @__PURE__ */ new Date();
-    const todayStart = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    ).toISOString();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const todayLogs = this.logs.filter((l) => l.timestamp >= todayStart);
-    const todayViolations = todayLogs.filter(
-      (l) => l.policy_violations.length > 0
-    );
-    const todayBlocked = todayLogs.filter(
-      (l) => l.response_status === "blocked"
-    );
+    const todayViolations = todayLogs.filter((l) => l.policy_violations.length > 0);
+    const todayBlocked = todayLogs.filter((l) => l.response_status === "blocked");
     const toolCounts = /* @__PURE__ */ new Map();
     for (const log of this.logs) {
-      toolCounts.set(
-        log.tool_name,
-        (toolCounts.get(log.tool_name) || 0) + 1
-      );
+      toolCounts.set(log.tool_name, (toolCounts.get(log.tool_name) || 0) + 1);
     }
     const topTools = Array.from(toolCounts.entries()).map(([tool_name, count]) => ({ tool_name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
     const recentViolations = this.logs.flatMap((l) => l.policy_violations).slice(-10).reverse();
-    const activeAgents = Array.from(this.agents.values()).filter(
-      (a) => a.status === "active"
-    );
+    const activeAgents = Array.from(this.agents.values()).filter((a) => a.status === "active");
     return {
       total_actions: this.logs.length,
       actions_today: todayLogs.length,
@@ -30296,19 +30364,18 @@ var LogStore = class {
   }
   /**
    * Export logs as JSON for compliance reporting.
+   * Includes chain verification result so auditors know the chain is intact.
    */
   exportLogs(options = {}) {
+    const chainStatus = this.verifyChain();
     const logs = this.queryLogs({ ...options, limit: 999999 });
-    return JSON.stringify(
-      {
-        export_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-        export_version: "1.0",
-        total_entries: logs.length,
-        entries: logs
-      },
-      null,
-      2
-    );
+    return JSON.stringify({
+      export_timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+      export_version: "1.0",
+      chain_verification: chainStatus,
+      total_entries: logs.length,
+      entries: logs
+    }, null, 2);
   }
   updateAgentActivity(agentId, agentName) {
     const agent = this.agents.get(agentId);
@@ -30322,7 +30389,8 @@ var LogStore = class {
     }
   }
   persistToDisk() {
-    if (!this.persistPath) return;
+    if (!this.persistPath)
+      return;
     try {
       const dir = path.dirname(this.persistPath);
       if (!fs.existsSync(dir)) {
@@ -30332,12 +30400,13 @@ var LogStore = class {
         logs: this.logs,
         agents: Array.from(this.agents.entries())
       };
-      fs.writeFileSync(this.persistPath, JSON.stringify(data));
+      fs.writeFileSync(this.persistPath, JSON.stringify(data, null, 2));
     } catch {
     }
   }
   loadFromDisk() {
-    if (!this.persistPath || !fs.existsSync(this.persistPath)) return;
+    if (!this.persistPath || !fs.existsSync(this.persistPath))
+      return;
     try {
       const raw = fs.readFileSync(this.persistPath, "utf-8");
       const data = JSON.parse(raw);
@@ -30350,7 +30419,7 @@ var LogStore = class {
   }
 };
 
-// src/policy-engine.ts
+// dist/policy-engine.js
 var PolicyEngine = class {
   rules = /* @__PURE__ */ new Map();
   constructor() {
@@ -30362,7 +30431,8 @@ var PolicyEngine = class {
   evaluate(context) {
     const violations = [];
     for (const rule of this.rules.values()) {
-      if (!rule.enabled) continue;
+      if (!rule.enabled)
+        continue;
       const triggered = this.checkCondition(rule.condition, context);
       if (triggered) {
         violations.push({
@@ -30399,7 +30469,8 @@ var PolicyEngine = class {
    */
   updateRule(id, updates) {
     const rule = this.rules.get(id);
-    if (!rule) return null;
+    if (!rule)
+      return null;
     const updated = { ...rule, ...updates, id: rule.id };
     this.rules.set(id, updated);
     return updated;
@@ -30427,18 +30498,20 @@ var PolicyEngine = class {
       case "tool_match":
         return this.matchValue(context.tool_name, condition.operator, condition.value);
       case "parameter_match":
-        if (!condition.field) return false;
+        if (!condition.field)
+          return false;
         const paramValue = this.getNestedValue(context.parameters, condition.field);
-        if (paramValue === void 0) return false;
+        if (paramValue === void 0)
+          return false;
         return this.matchValue(String(paramValue), condition.operator, condition.value);
       case "data_field_match":
-        return context.data_fields_accessed.some(
-          (field) => this.matchValue(field, condition.operator, condition.value)
-        );
+        return context.data_fields_accessed.some((field) => this.matchValue(field, condition.operator, condition.value));
       case "threshold":
-        if (!condition.field) return false;
+        if (!condition.field)
+          return false;
         const numValue = Number(this.getNestedValue(context.parameters, condition.field));
-        if (isNaN(numValue)) return false;
+        if (isNaN(numValue))
+          return false;
         return this.matchValue(numValue, condition.operator, condition.value);
       default:
         return false;
@@ -30517,7 +30590,7 @@ var PolicyEngine = class {
   }
 };
 
-// src/index.ts
+// dist/index.js
 import * as path2 from "path";
 import * as os from "os";
 var dataDir = path2.join(os.homedir(), ".agent-audit-trail");
@@ -30527,353 +30600,350 @@ var server = new McpServer({
   name: "agent-audit-trail",
   version: "1.0.0"
 });
-server.tool(
-  "log_action",
-  "Log an agent action to the immutable audit trail. Call this before or after your agent performs any tool call to create a compliance record. Returns the log entry ID and any policy violations detected.",
-  {
-    agent_name: external_exports3.string().describe("Name or identifier of the agent performing the action"),
-    agent_id: external_exports3.string().optional().describe("Unique agent ID. Auto-generated if not provided."),
-    tool_name: external_exports3.string().describe("Name of the tool being called (e.g., 'database_query', 'send_email', 'stripe_charge')"),
-    tool_action: external_exports3.string().describe("Specific action within the tool (e.g., 'SELECT', 'create_invoice', 'refund')"),
-    parameters: external_exports3.string().describe("JSON string of the parameters passed to the tool call"),
-    response_summary: external_exports3.string().optional().describe("Brief summary of what the tool returned"),
-    response_status: external_exports3.enum(["success", "error", "blocked"]).optional().describe("Outcome of the tool call"),
-    data_fields_accessed: external_exports3.string().optional().describe("Comma-separated list of data fields accessed (e.g., 'user.email,user.ssn,order.amount')"),
-    execution_duration_ms: external_exports3.number().optional().describe("How long the tool call took in milliseconds"),
-    token_cost_estimate: external_exports3.number().optional().describe("Estimated token cost of this action in USD"),
-    metadata: external_exports3.string().optional().describe("JSON string of any additional metadata to attach to the log entry")
-  },
-  async (args) => {
-    let parsedParams = {};
-    try {
-      parsedParams = JSON.parse(args.parameters);
-    } catch {
-      parsedParams = { raw: args.parameters };
-    }
-    let parsedMetadata = {};
-    if (args.metadata) {
-      try {
-        parsedMetadata = JSON.parse(args.metadata);
-      } catch {
-        parsedMetadata = { raw: args.metadata };
-      }
-    }
-    const dataFields = args.data_fields_accessed ? args.data_fields_accessed.split(",").map((f) => f.trim()) : [];
-    const violations = policyEngine.evaluate({
-      tool_name: args.tool_name,
-      tool_action: args.tool_action,
-      parameters: parsedParams,
-      data_fields_accessed: dataFields
-    });
-    const shouldBlock = policyEngine.shouldBlock(violations);
-    const status = shouldBlock ? "blocked" : args.response_status || "success";
-    const entry = logStore.writeLog({
-      agent_id: args.agent_id || `agent_${args.agent_name.toLowerCase().replace(/\s+/g, "_")}`,
-      agent_name: args.agent_name,
-      tool_name: args.tool_name,
-      tool_action: args.tool_action,
-      parameters: parsedParams,
-      response_summary: args.response_summary || "",
-      response_status: status,
-      data_fields_accessed: dataFields,
-      execution_duration_ms: args.execution_duration_ms || 0,
-      token_cost_estimate: args.token_cost_estimate || null,
-      policy_violations: violations,
-      metadata: parsedMetadata
-    });
-    const result = {
-      log_id: entry.id,
-      timestamp: entry.timestamp,
-      status: entry.response_status,
-      violations_count: violations.length
-    };
-    if (violations.length > 0) {
-      result.violations = violations.map((v) => ({
-        rule: v.rule_name,
-        severity: v.severity,
-        action: v.action_taken,
-        details: v.details
-      }));
-    }
-    if (shouldBlock) {
-      result.blocked = true;
-      result.block_reason = "Action blocked by policy. Review violations for details.";
-    }
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(result, null, 2)
-        }
-      ]
-    };
-  }
-);
-server.tool(
-  "query_logs",
-  "Search the audit trail with filters. Returns matching log entries sorted newest first.",
-  {
-    agent_id: external_exports3.string().optional().describe("Filter by agent ID"),
-    tool_name: external_exports3.string().optional().describe("Filter by tool name"),
-    status: external_exports3.enum(["success", "error", "blocked"]).optional().describe("Filter by action status"),
-    has_violations: external_exports3.boolean().optional().describe("Only return entries with policy violations"),
-    start_date: external_exports3.string().optional().describe("Filter entries after this ISO date"),
-    end_date: external_exports3.string().optional().describe("Filter entries before this ISO date"),
-    limit: external_exports3.number().optional().describe("Max entries to return (default 20)"),
-    offset: external_exports3.number().optional().describe("Pagination offset")
-  },
-  async (args) => {
-    const logs = logStore.queryLogs({
-      agent_id: args.agent_id,
-      tool_name: args.tool_name,
-      status: args.status,
-      has_violations: args.has_violations,
-      start_date: args.start_date,
-      end_date: args.end_date,
-      limit: args.limit || 20,
-      offset: args.offset || 0
-    });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              count: logs.length,
-              entries: logs.map((l) => ({
-                id: l.id,
-                timestamp: l.timestamp,
-                agent: l.agent_name,
-                tool: `${l.tool_name}.${l.tool_action}`,
-                status: l.response_status,
-                violations: l.policy_violations.length,
-                duration_ms: l.execution_duration_ms
-              }))
-            },
-            null,
-            2
-          )
-        }
-      ]
-    };
-  }
-);
-server.tool(
-  "get_log_detail",
-  "Retrieve the complete details of a specific audit log entry by ID.",
-  {
-    log_id: external_exports3.string().describe("The ID of the log entry to retrieve")
-  },
-  async (args) => {
-    const log = logStore.getLog(args.log_id);
-    if (!log) {
-      return {
-        content: [
-          { type: "text", text: `No log entry found with ID: ${args.log_id}` }
-        ]
-      };
-    }
-    return {
-      content: [
-        { type: "text", text: JSON.stringify(log, null, 2) }
-      ]
-    };
-  }
-);
-server.tool(
-  "get_summary",
-  "Get a summary of audit trail activity including action counts, violations, active agents, and top tools.",
-  {},
-  async () => {
-    const summary = logStore.getSummary();
-    return {
-      content: [
-        { type: "text", text: JSON.stringify(summary, null, 2) }
-      ]
-    };
-  }
-);
-server.tool(
-  "list_agents",
-  "List all agents that have been registered or have logged actions.",
-  {},
-  async () => {
-    const agents = logStore.listAgents();
-    return {
-      content: [
-        { type: "text", text: JSON.stringify({ agents }, null, 2) }
-      ]
-    };
-  }
-);
-server.tool(
-  "register_agent",
-  "Register a new agent in the audit trail system. Agents are also auto-registered on first action.",
-  {
-    agent_id: external_exports3.string().describe("Unique identifier for the agent"),
-    agent_name: external_exports3.string().describe("Human-readable name for the agent"),
-    description: external_exports3.string().optional().describe("Description of what this agent does")
-  },
-  async (args) => {
-    const agent = logStore.registerAgent(
-      args.agent_id,
-      args.agent_name,
-      args.description || ""
-    );
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ registered: agent }, null, 2)
-        }
-      ]
-    };
-  }
-);
-server.tool(
-  "list_policy_rules",
-  "List all policy rules currently configured in the system.",
-  {},
-  async () => {
-    const rules = policyEngine.listRules();
-    return {
-      content: [
-        { type: "text", text: JSON.stringify({ rules }, null, 2) }
-      ]
-    };
-  }
-);
-server.tool(
-  "add_policy_rule",
-  "Add a new policy rule that will be evaluated against all future agent actions.",
-  {
-    name: external_exports3.string().describe("Short name for the rule"),
-    description: external_exports3.string().describe("What this rule checks for"),
-    condition_type: external_exports3.enum(["tool_match", "parameter_match", "data_field_match", "threshold"]).describe("Type of condition to evaluate"),
-    condition_field: external_exports3.string().optional().describe("Field path to check (for parameter_match and threshold types)"),
-    condition_operator: external_exports3.enum(["equals", "contains", "greater_than", "less_than", "matches_regex"]).describe("Comparison operator"),
-    condition_value: external_exports3.string().describe("Value to compare against"),
-    action: external_exports3.enum(["flag", "block", "alert"]).describe("What to do when rule is triggered"),
-    severity: external_exports3.enum(["low", "medium", "high", "critical"]).describe("Severity level of the violation")
-  },
-  async (args) => {
-    const rule = policyEngine.addRule({
-      name: args.name,
-      description: args.description,
-      enabled: true,
-      condition: {
-        type: args.condition_type,
-        field: args.condition_field,
-        operator: args.condition_operator,
-        value: args.condition_value
+async function checkPolicyRemote(params) {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey)
+    return null;
+  try {
+    const response = await fetch(`${supabaseUrl}/functions/v1/check-policy`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceRoleKey}`
       },
-      action: args.action,
-      severity: args.severity
+      body: JSON.stringify({
+        agent_id: params.agent_id,
+        tool_name: params.tool_name,
+        tool_action: params.tool_action,
+        parameters: params.parameters,
+        data_fields_accessed: params.data_fields_accessed
+      })
     });
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ created: rule }, null, 2)
-        }
-      ]
-    };
+    if (!response.ok)
+      return null;
+    return await response.json();
+  } catch {
+    return null;
   }
-);
-server.tool(
-  "toggle_policy_rule",
-  "Enable or disable an existing policy rule.",
-  {
-    rule_id: external_exports3.string().describe("ID of the rule to toggle"),
-    enabled: external_exports3.boolean().describe("Set to true to enable, false to disable")
-  },
-  async (args) => {
-    const rule = policyEngine.updateRule(args.rule_id, {
-      enabled: args.enabled
-    });
-    if (!rule) {
-      return {
-        content: [
-          { type: "text", text: `Rule not found: ${args.rule_id}` }
-        ]
-      };
+}
+server.tool("log_action", "Log an agent action to the immutable audit trail. Call this before or after your agent performs any tool call to create a compliance record. Returns the log entry ID and any policy violations detected.", {
+  agent_name: external_exports3.string().describe("Name or identifier of the agent performing the action"),
+  agent_id: external_exports3.string().optional().describe("Unique agent ID. Auto-generated if not provided."),
+  tool_name: external_exports3.string().describe("Name of the tool being called (e.g., 'database_query', 'send_email', 'stripe_charge')"),
+  tool_action: external_exports3.string().describe("Specific action within the tool (e.g., 'SELECT', 'create_invoice', 'refund')"),
+  parameters: external_exports3.string().describe("JSON string of the parameters passed to the tool call"),
+  response_summary: external_exports3.string().optional().describe("Brief summary of what the tool returned"),
+  response_status: external_exports3.enum(["success", "error", "blocked"]).optional().describe("Outcome of the tool call"),
+  data_fields_accessed: external_exports3.string().optional().describe("Comma-separated list of data fields accessed (e.g., 'user.email,user.ssn,order.amount')"),
+  execution_duration_ms: external_exports3.number().optional().describe("How long the tool call took in milliseconds"),
+  token_cost_estimate: external_exports3.number().optional().describe("Estimated token cost of this action in USD"),
+  metadata: external_exports3.string().optional().describe("JSON string of any additional metadata to attach to the log entry")
+}, async (args) => {
+  let parsedParams = {};
+  try {
+    parsedParams = JSON.parse(args.parameters);
+  } catch {
+    parsedParams = { raw: args.parameters };
+  }
+  let parsedMetadata = {};
+  if (args.metadata) {
+    try {
+      parsedMetadata = JSON.parse(args.metadata);
+    } catch {
+      parsedMetadata = { raw: args.metadata };
     }
+  }
+  const dataFields = args.data_fields_accessed ? args.data_fields_accessed.split(",").map((f) => f.trim()) : [];
+  const agentId = args.agent_id || `agent_${args.agent_name.toLowerCase().replace(/\s+/g, "_")}`;
+  let policyBlocked = false;
+  let policyViolations = [];
+  const remoteCheck = await checkPolicyRemote({
+    agent_id: agentId,
+    tool_name: args.tool_name,
+    tool_action: args.tool_action,
+    parameters: parsedParams,
+    data_fields_accessed: dataFields
+  });
+  if (remoteCheck) {
+    policyBlocked = !remoteCheck.allowed;
+    policyViolations = remoteCheck.violations.map((v) => ({
+      rule_id: v.rule_id,
+      rule_name: v.message || v.rule_id,
+      severity: v.severity || "low",
+      action_taken: v.enforcement || "flagged",
+      details: v.message
+    }));
+  }
+  const localViolations = policyEngine.evaluate({
+    tool_name: args.tool_name,
+    tool_action: args.tool_action,
+    parameters: parsedParams,
+    data_fields_accessed: dataFields
+  });
+  const shouldBlock = policyEngine.shouldBlock(localViolations) || policyBlocked;
+  const status = shouldBlock ? "blocked" : args.response_status || "success";
+  const allViolations = [...policyViolations];
+  for (const v of localViolations) {
+    if (!allViolations.some((av) => av.rule_id === v.rule_id)) {
+      allViolations.push(v);
+    }
+  }
+  const entry = logStore.writeLog({
+    agent_id: agentId,
+    agent_name: args.agent_name,
+    tool_name: args.tool_name,
+    tool_action: args.tool_action,
+    parameters: parsedParams,
+    response_summary: args.response_summary || "",
+    response_status: status,
+    data_fields_accessed: dataFields,
+    execution_duration_ms: args.execution_duration_ms || 0,
+    token_cost_estimate: args.token_cost_estimate || null,
+    policy_violations: allViolations,
+    metadata: parsedMetadata
+  });
+  const result = {
+    log_id: entry.id,
+    timestamp: entry.timestamp,
+    status: entry.response_status,
+    violations_count: allViolations.length
+  };
+  if (allViolations.length > 0) {
+    result.violations = allViolations.map((v) => ({
+      rule: v.rule_name,
+      severity: v.severity,
+      action: v.action_taken,
+      details: v.details
+    }));
+  }
+  if (shouldBlock) {
+    result.blocked = true;
+    result.block_reason = "Action blocked by policy. Review violations for details.";
+  }
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(result, null, 2)
+      }
+    ]
+  };
+});
+server.tool("query_logs", "Search the audit trail with filters. Returns matching log entries sorted newest first.", {
+  agent_id: external_exports3.string().optional().describe("Filter by agent ID"),
+  tool_name: external_exports3.string().optional().describe("Filter by tool name"),
+  status: external_exports3.enum(["success", "error", "blocked"]).optional().describe("Filter by action status"),
+  has_violations: external_exports3.boolean().optional().describe("Only return entries with policy violations"),
+  start_date: external_exports3.string().optional().describe("Filter entries after this ISO date"),
+  end_date: external_exports3.string().optional().describe("Filter entries before this ISO date"),
+  limit: external_exports3.number().optional().describe("Max entries to return (default 20)"),
+  offset: external_exports3.number().optional().describe("Pagination offset")
+}, async (args) => {
+  const logs = logStore.queryLogs({
+    agent_id: args.agent_id,
+    tool_name: args.tool_name,
+    status: args.status,
+    has_violations: args.has_violations,
+    start_date: args.start_date,
+    end_date: args.end_date,
+    limit: args.limit || 20,
+    offset: args.offset || 0
+  });
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          count: logs.length,
+          entries: logs.map((l) => ({
+            id: l.id,
+            timestamp: l.timestamp,
+            agent: l.agent_name,
+            tool: `${l.tool_name}.${l.tool_action}`,
+            status: l.response_status,
+            violations: l.policy_violations.length,
+            duration_ms: l.execution_duration_ms,
+            previous_hash: l.previous_hash,
+            hash: l.hash
+          }))
+        }, null, 2)
+      }
+    ]
+  };
+});
+server.tool("get_log_detail", "Retrieve the complete details of a specific audit log entry by ID.", {
+  log_id: external_exports3.string().describe("The ID of the log entry to retrieve")
+}, async (args) => {
+  const log = logStore.getLog(args.log_id);
+  if (!log) {
     return {
       content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            { updated: { id: rule.id, name: rule.name, enabled: rule.enabled } },
-            null,
-            2
-          )
-        }
+        { type: "text", text: `No log entry found with ID: ${args.log_id}` }
       ]
     };
   }
-);
-server.tool(
-  "export_audit_log",
-  "Export audit logs as a JSON compliance report. Use for regulatory submissions, internal audits, or archival.",
-  {
-    agent_id: external_exports3.string().optional().describe("Filter by agent ID"),
-    tool_name: external_exports3.string().optional().describe("Filter by tool name"),
-    start_date: external_exports3.string().optional().describe("Export entries after this ISO date"),
-    end_date: external_exports3.string().optional().describe("Export entries before this ISO date"),
-    has_violations: external_exports3.boolean().optional().describe("Only export entries with violations")
-  },
-  async (args) => {
-    const exported = logStore.exportLogs({
-      agent_id: args.agent_id,
-      tool_name: args.tool_name,
-      start_date: args.start_date,
-      end_date: args.end_date,
-      has_violations: args.has_violations
-    });
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(log, null, 2) }
+    ]
+  };
+});
+server.tool("get_summary", "Get a summary of audit trail activity including action counts, violations, active agents, and top tools.", {}, async () => {
+  const summary = logStore.getSummary();
+  return {
+    content: [
+      { type: "text", text: JSON.stringify(summary, null, 2) }
+    ]
+  };
+});
+server.tool("verify_chain", "Verify the cryptographic integrity of the entire audit trail chain. Checks that no log entries have been modified or deleted since they were written. Returns which entry failed and why, or confirms the chain is intact.", {}, async () => {
+  const result = logStore.verifyChain();
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({
+          chain_intact: result.valid,
+          entries_verified: result.entries_checked,
+          broken_at: result.broken_at ?? "none",
+          detail: result.valid ? `All ${result.entries_checked} entries verified. Chain is intact.` : result.error
+        }, null, 2)
+      }
+    ]
+  };
+});
+server.tool("list_agents", "List all agents that have been registered or have logged actions.", {}, async () => {
+  const agents = logStore.listAgents();
+  return {
+    content: [
+      { type: "text", text: JSON.stringify({ agents }, null, 2) }
+    ]
+  };
+});
+server.tool("register_agent", "Register a new agent in the audit trail system. Agents are also auto-registered on first action.", {
+  agent_id: external_exports3.string().describe("Unique identifier for the agent"),
+  agent_name: external_exports3.string().describe("Human-readable name for the agent"),
+  description: external_exports3.string().optional().describe("Description of what this agent does")
+}, async (args) => {
+  const agent = logStore.registerAgent(args.agent_id, args.agent_name, args.description || "");
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({ registered: agent }, null, 2)
+      }
+    ]
+  };
+});
+server.tool("list_policy_rules", "List all policy rules currently configured in the system.", {}, async () => {
+  const rules = policyEngine.listRules();
+  return {
+    content: [
+      { type: "text", text: JSON.stringify({ rules }, null, 2) }
+    ]
+  };
+});
+server.tool("add_policy_rule", "Add a new policy rule that will be evaluated against all future agent actions.", {
+  name: external_exports3.string().describe("Short name for the rule"),
+  description: external_exports3.string().describe("What this rule checks for"),
+  condition_type: external_exports3.enum(["tool_match", "parameter_match", "data_field_match", "threshold"]).describe("Type of condition to evaluate"),
+  condition_field: external_exports3.string().optional().describe("Field path to check (for parameter_match and threshold types)"),
+  condition_operator: external_exports3.enum(["equals", "contains", "greater_than", "less_than", "matches_regex"]).describe("Comparison operator"),
+  condition_value: external_exports3.string().describe("Value to compare against"),
+  action: external_exports3.enum(["flag", "block", "alert"]).describe("What to do when rule is triggered"),
+  severity: external_exports3.enum(["low", "medium", "high", "critical"]).describe("Severity level of the violation")
+}, async (args) => {
+  const rule = policyEngine.addRule({
+    name: args.name,
+    description: args.description,
+    enabled: true,
+    condition: {
+      type: args.condition_type,
+      field: args.condition_field,
+      operator: args.condition_operator,
+      value: args.condition_value
+    },
+    action: args.action,
+    severity: args.severity
+  });
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify({ created: rule }, null, 2)
+      }
+    ]
+  };
+});
+server.tool("toggle_policy_rule", "Enable or disable an existing policy rule.", {
+  rule_id: external_exports3.string().describe("ID of the rule to toggle"),
+  enabled: external_exports3.boolean().describe("Set to true to enable, false to disable")
+}, async (args) => {
+  const rule = policyEngine.updateRule(args.rule_id, {
+    enabled: args.enabled
+  });
+  if (!rule) {
     return {
-      content: [{ type: "text", text: exported }]
+      content: [
+        { type: "text", text: `Rule not found: ${args.rule_id}` }
+      ]
     };
   }
-);
-server.resource(
-  "audit-summary",
-  "audit://summary",
-  async (uri) => ({
-    contents: [
+  return {
+    content: [
       {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify(logStore.getSummary(), null, 2)
+        type: "text",
+        text: JSON.stringify({ updated: { id: rule.id, name: rule.name, enabled: rule.enabled } }, null, 2)
       }
     ]
-  })
-);
-server.resource(
-  "policy-rules",
-  "audit://policies",
-  async (uri) => ({
-    contents: [
-      {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify({ rules: policyEngine.listRules() }, null, 2)
-      }
-    ]
-  })
-);
-server.resource(
-  "registered-agents",
-  "audit://agents",
-  async (uri) => ({
-    contents: [
-      {
-        uri: uri.href,
-        mimeType: "application/json",
-        text: JSON.stringify({ agents: logStore.listAgents() }, null, 2)
-      }
-    ]
-  })
-);
+  };
+});
+server.tool("export_audit_log", "Export audit logs as a JSON compliance report. Use for regulatory submissions, internal audits, or archival.", {
+  agent_id: external_exports3.string().optional().describe("Filter by agent ID"),
+  tool_name: external_exports3.string().optional().describe("Filter by tool name"),
+  start_date: external_exports3.string().optional().describe("Export entries after this ISO date"),
+  end_date: external_exports3.string().optional().describe("Export entries before this ISO date"),
+  has_violations: external_exports3.boolean().optional().describe("Only export entries with violations")
+}, async (args) => {
+  const exported = logStore.exportLogs({
+    agent_id: args.agent_id,
+    tool_name: args.tool_name,
+    start_date: args.start_date,
+    end_date: args.end_date,
+    has_violations: args.has_violations
+  });
+  return {
+    content: [{ type: "text", text: exported }]
+  };
+});
+server.resource("audit-summary", "audit://summary", async (uri) => ({
+  contents: [
+    {
+      uri: uri.href,
+      mimeType: "application/json",
+      text: JSON.stringify(logStore.getSummary(), null, 2)
+    }
+  ]
+}));
+server.resource("policy-rules", "audit://policies", async (uri) => ({
+  contents: [
+    {
+      uri: uri.href,
+      mimeType: "application/json",
+      text: JSON.stringify({ rules: policyEngine.listRules() }, null, 2)
+    }
+  ]
+}));
+server.resource("registered-agents", "audit://agents", async (uri) => ({
+  contents: [
+    {
+      uri: uri.href,
+      mimeType: "application/json",
+      text: JSON.stringify({ agents: logStore.listAgents() }, null, 2)
+    }
+  ]
+}));
 function createSandboxServer() {
   const sandboxLogStore = new LogStore(void 0);
   const sandboxPolicyEngine = new PolicyEngine();
@@ -30881,50 +30951,45 @@ function createSandboxServer() {
     name: "agent-audit-trail",
     version: "1.0.0"
   });
-  sandboxServer.tool(
-    "log_action",
-    "Log an agent action to the immutable audit trail",
-    {
-      agent_name: external_exports3.string(),
-      agent_id: external_exports3.string().optional(),
-      tool_name: external_exports3.string(),
-      tool_action: external_exports3.string().optional(),
-      parameters: external_exports3.record(external_exports3.string(), external_exports3.any()).optional(),
-      data_fields_accessed: external_exports3.string().optional(),
-      metadata: external_exports3.record(external_exports3.string(), external_exports3.any()).optional()
-    },
-    async (args) => {
-      const dataFields = (args.data_fields_accessed || "").split(",").map((s) => s.trim()).filter(Boolean);
-      const result = sandboxLogStore.writeLog({
-        agent_id: args.agent_id || "sandbox-agent",
-        agent_name: args.agent_name,
-        tool_name: args.tool_name,
-        tool_action: args.tool_action || "unknown",
-        parameters: args.parameters || {},
-        response_summary: "sandbox log entry",
-        response_status: "success",
-        data_fields_accessed: dataFields,
-        execution_duration_ms: 0,
-        token_cost_estimate: null,
-        policy_violations: [],
-        metadata: args.metadata || {}
-      });
-      const violations = sandboxPolicyEngine.evaluate({
-        tool_name: args.tool_name,
-        tool_action: args.tool_action || "unknown",
-        parameters: args.parameters || {},
-        data_fields_accessed: dataFields
-      });
-      return {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ log_id: result.id, violations })
-          }
-        ]
-      };
-    }
-  );
+  sandboxServer.tool("log_action", "Log an agent action to the immutable audit trail", {
+    agent_name: external_exports3.string(),
+    agent_id: external_exports3.string().optional(),
+    tool_name: external_exports3.string(),
+    tool_action: external_exports3.string().optional(),
+    parameters: external_exports3.record(external_exports3.string(), external_exports3.any()).optional(),
+    data_fields_accessed: external_exports3.string().optional(),
+    metadata: external_exports3.record(external_exports3.string(), external_exports3.any()).optional()
+  }, async (args) => {
+    const dataFields = (args.data_fields_accessed || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const result = sandboxLogStore.writeLog({
+      agent_id: args.agent_id || "sandbox-agent",
+      agent_name: args.agent_name,
+      tool_name: args.tool_name,
+      tool_action: args.tool_action || "unknown",
+      parameters: args.parameters || {},
+      response_summary: "sandbox log entry",
+      response_status: "success",
+      data_fields_accessed: dataFields,
+      execution_duration_ms: 0,
+      token_cost_estimate: null,
+      policy_violations: [],
+      metadata: args.metadata || {}
+    });
+    const violations = sandboxPolicyEngine.evaluate({
+      tool_name: args.tool_name,
+      tool_action: args.tool_action || "unknown",
+      parameters: args.parameters || {},
+      data_fields_accessed: dataFields
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ log_id: result.id, violations })
+        }
+      ]
+    };
+  });
   return sandboxServer;
 }
 async function main() {

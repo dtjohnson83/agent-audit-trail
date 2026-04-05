@@ -2,36 +2,36 @@
   "pages": {
     "/_not-found/page": [
       "static/chunks/webpack-199ba85708191a88.js",
-      "static/chunks/fd9d1056-5f55067fad1d0619.js",
-      "static/chunks/117-fc73271fc24037f1.js",
+      "static/chunks/fd9d1056-42a1c2df9c4a85a8.js",
+      "static/chunks/117-59e030f1b0f89043.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/chunks/app/_not-found/page-2c7138c911242dc1.js"
+      "static/chunks/app/_not-found/page-9042a24b4e105126.js"
     ],
     "/layout": [
       "static/chunks/webpack-199ba85708191a88.js",
-      "static/chunks/fd9d1056-5f55067fad1d0619.js",
-      "static/chunks/117-fc73271fc24037f1.js",
+      "static/chunks/fd9d1056-42a1c2df9c4a85a8.js",
+      "static/chunks/117-59e030f1b0f89043.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/css/f0a775b40d4eabb4.css",
+      "static/css/9c02cc8a01f29b76.css",
       "static/chunks/app/layout-1cf3462a0d4a0838.js"
     ],
     "/dashboard/page": [
       "static/chunks/webpack-199ba85708191a88.js",
-      "static/chunks/fd9d1056-5f55067fad1d0619.js",
-      "static/chunks/117-fc73271fc24037f1.js",
+      "static/chunks/fd9d1056-42a1c2df9c4a85a8.js",
+      "static/chunks/117-59e030f1b0f89043.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
       "static/chunks/2f0b94e8-c1bf379e68a8eeff.js",
       "static/chunks/164f4fb6-3d611092c0d75bef.js",
       "static/chunks/44530001-5f86e157ede9686f.js",
       "static/chunks/948-4c3c54b10a7135e9.js",
-      "static/chunks/app/dashboard/page-69c0a270dd5f6bab.js"
+      "static/chunks/app/dashboard/page-914aba661944c36b.js"
     ],
     "/page": [
       "static/chunks/webpack-199ba85708191a88.js",
-      "static/chunks/fd9d1056-5f55067fad1d0619.js",
-      "static/chunks/117-fc73271fc24037f1.js",
+      "static/chunks/fd9d1056-42a1c2df9c4a85a8.js",
+      "static/chunks/117-59e030f1b0f89043.js",
       "static/chunks/main-app-c9bc8cee76a179af.js",
-      "static/chunks/app/page-78ea1a55740a8645.js"
+      "static/chunks/app/page-5a860da437e7cae9.js"
     ]
   }
 }

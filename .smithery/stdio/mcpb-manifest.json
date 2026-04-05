@@ -1,0 +1,36 @@
+{
+  "manifest_version": "0.2",
+  "name": "agent-audit-trail",
+  "version": "1.0.0",
+  "description": "MCP Server",
+  "author": {
+    "name": "Ed"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "index.cjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/index.cjs"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "log_action",
+      "description": "Log an agent action to the immutable audit trail"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

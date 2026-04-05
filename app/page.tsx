@@ -356,7 +356,7 @@ export default function LandingPage() {
           </Reveal>
 
           {[
-            { icon: <IconChain size={19} color={C.accent} />, title: "Immutable Hash Chain", desc: "Every agent action is logged with a cryptographic hash linking it to the previous entry. Tamper with one record and the chain breaks.", color: C.accent },
+            { icon: <IconChain size={19} color={C.accent} />, title: "Tamper-Evident Hash Chain", desc: "Every agent action is logged with a cryptographic hash linking it to the previous entry. Any modification breaks the chain and is immediately detectable.", color: C.accent },
             { icon: <IconShield size={19} color={C.warn} />, title: "Policy Engine", desc: "Define rules that flag or block agent behavior. PII access, destructive operations, unauthorized tools — caught before damage is done.", color: C.warn },
             { icon: <IconDoc size={19} color={C.info} />, title: "Compliance Export", desc: "One-click PDF and CSV reports for auditors. Filter by agent, date range, or violation type. Hand it to legal and move on.", color: C.info },
             { icon: <IconEye size={19} color={C.textMid} />, title: "Full Transparency", desc: "Every tool call, every parameter, every response — recorded with timestamps and duration. Nothing hidden.", color: C.textMid },
@@ -444,7 +444,7 @@ export default function LandingPage() {
           </Reveal>
 
           {[
-            { q: "How is the audit log tamper-proof?", a: "Every action is logged with a SHA-256 hash that chains to the previous entry. The chain is recalculated on every read. If anything was modified or deleted, the chain breaks and the dashboard flags it immediately." },
+            { q: "How is the audit log tamper-evident?", a: "Every entry is cryptographically chained to the previous one. Any modification breaks the chain and is immediately detectable. Write access is restricted at the database level, and chain integrity is verified continuously." },
             { q: "Can I block actions, not just log them?", a: "Yes. The policy engine runs in two modes: Flag only (log and alert but let the action through) or Block (stop the action before it executes and alert your team). You can set different rules per agent and per tool." },
             { q: "What agents does this work with?", a: "Agent Audit Trail registers as an MCP server — the same protocol OpenAI, Anthropic, and major agent frameworks use. Point your agent's MCP config at our endpoint and it immediately has access to log_action, verify_chain, and policy controls. No code changes. Works with OpenClaw, Claude Code, Cline, and any MCP-compatible agent." },
             { q: "Where is the data stored?", a: "Your audit logs live in your own Supabase/PostgreSQL database. You control the infrastructure. We do not hold your data — the platform is the audit trail for your own systems." },
@@ -512,6 +512,10 @@ export default function LandingPage() {
                   <p style={{ fontSize: 13, color: C.textMid, margin: "0 0 20px", lineHeight: 1.5 }}>
                     Join the waitlist for early access and priority onboarding.
                   </p>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, background: C.ok + "0a", border: "1px solid " + C.ok + "15", marginBottom: 16 }}>
+                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: C.ok }} />
+                    <span style={{ fontFamily: "var(--fh)", fontSize: 10, fontWeight: 700, color: C.ok, letterSpacing: "0.04em" }}>Free during early access</span>
+                  </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <input
                       type="email" value={email} onChange={(e) => setEmail(e.target.value)}

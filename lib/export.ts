@@ -12,8 +12,11 @@ export function exportCsv(logs: AuditLog[], filename: string) {
     status: l.response_status,
     summary: l.response_summary,
     duration_ms: l.execution_duration_ms,
-    token_cost: l.token_cost_estimate ?? 0,
-    violations: l.policy_violations.map(v => v.message).join('; '),
+    violations: l.policy_violations.map(v => {
+      // Handle both string and object violation formats
+      if (typeof v === 'string') return v;
+      return `[${(v.severity || '?').toUpperCase()}] ${v.rule_name || v.rule_id || 'Unknown'}: ${v.details || ''}`;
+    }).join(' | '),
     hash: l.hash,
     review_status: l.review_status,
   }))
@@ -70,15 +73,18 @@ export function exportPdf(logs: AuditLog[], filename: string) {
     l.response_status,
     l.response_summary.substring(0, 50),
     `${l.execution_duration_ms}ms`,
-    `$${l.token_cost_estimate ?? 0}`,
-    l.policy_violations.length > 0 ? l.policy_violations[0].message.substring(0, 30) : '-',
+    l.policy_violations.length > 0
+      ? (typeof l.policy_violations[0] === 'string'
+          ? l.policy_violations[0].substring(0, 30)
+          : `${l.policy_violations[0].severity}: ${l.policy_violations[0].rule_name}`.substring(0, 30))
+      : '-',
     l.hash.substring(0, 10),
   ])
 
   // @ts-ignore
   doc.autoTable({
     startY: 56,
-    head: [['Time', 'Agent', 'Tool', 'Status', 'Summary', 'Duration', 'Cost', 'Violations', 'Hash']],
+    head: [['Time', 'Agent', 'Tool', 'Status', 'Summary', 'Duration', 'Violations', 'Hash']],
     body: tableData,
     styles: { fontSize: 7 },
     headStyles: { fillColor: [10, 155, 128] },
