@@ -2,14 +2,16 @@
 import { useState } from 'react'
 import { Theme } from '@/lib/theme'
 import type { AuditLog } from '@/lib/types'
-import { exportCsv, exportPdf } from '@/lib/export'
+import { exportCsv, exportPdf, exportColoradoSb205 } from '@/lib/export'
 
 interface Props {
   theme: Theme
   logs: AuditLog[]
+  orgName?: string
+  contactEmail?: string
 }
 
-export default function ExportButton({ theme: t, logs }: Props) {
+export default function ExportButton({ theme: t, logs, orgName, contactEmail }: Props) {
   const [open, setOpen] = useState(false)
 
   if (logs.length === 0) return null
@@ -32,7 +34,7 @@ export default function ExportButton({ theme: t, logs }: Props) {
         <div style={{
           position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
           background: t.surfaceSolid, border: `1px solid ${t.border}`,
-          borderRadius: 10, overflow: 'hidden', minWidth: 140,
+          borderRadius: 10, overflow: 'hidden', minWidth: 180,
           boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
         }}>
           <button
@@ -51,6 +53,19 @@ export default function ExportButton({ theme: t, logs }: Props) {
               cursor: 'pointer', textAlign: 'left',
             }}
           >Export PDF</button>
+          <div style={{ borderTop: `1px solid ${t.border}`, padding: '6px 14px 4px' }}>
+            <button
+              onClick={() => { exportColoradoSb205(logs, filename, orgName, contactEmail); setOpen(false) }}
+              style={{
+                display: 'block', width: '100%', padding: '8px 0 4px', fontSize: 11,
+                background: 'transparent', border: 'none', color: '#0a9b80',
+                cursor: 'pointer', textAlign: 'left', fontWeight: 600,
+              }}
+              title="Colorado SB 205 AI Audit Compliance Report"
+            >
+              CO SB 205 Report
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -9,6 +9,7 @@ export function useAuditLogs(agentFilter: string, dateRange: { start: Date | nul
   const [error, setError] = useState<string | null>(null)
 
   const fetch = useCallback(async () => {
+    if (!supabase) { setLoading(false); return; }
     setLoading(true)
     setError(null)
     try {

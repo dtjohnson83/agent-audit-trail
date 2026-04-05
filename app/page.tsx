@@ -381,6 +381,44 @@ export default function LandingPage() {
           ))}
         </section>
 
+        {/* WHAT GETS RECORDED */}
+        <section style={{ paddingBottom: 52 }}>
+          <Reveal>
+            <div style={{ textAlign: "center", marginBottom: 16 }}>
+              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>What Gets Recorded</span>
+            </div>
+          </Reveal>
+          <Reveal delay={0.05}>
+            <div style={{
+              padding: "20px 18px", borderRadius: 14,
+              background: "rgba(255,255,255,0.01)", border: "1px solid " + C.border,
+            }}>
+              {[
+                { f: "Initiated By", d: "Who or what triggered the agent to act" },
+                { f: "Agent", d: "Which agent performed the action" },
+                { f: "Tool & Action", d: "What tool was called and what it did" },
+                { f: "Parameters", d: "The full input passed to the tool" },
+                { f: "Result", d: "Response summary and success/error/blocked status" },
+                { f: "Policy Violations", d: "Which rules were triggered and severity" },
+                { f: "Timestamp", d: "When it happened, down to the millisecond" },
+                { f: "Duration", d: "How long the action took to execute" },
+                { f: "Environment", d: "Production, staging, dev, or test" },
+                { f: "Session", d: "Groups related actions into a single workflow" },
+                { f: "Hash Chain", d: "Cryptographic link to the previous entry for tamper detection" },
+              ].map(({ f, d }, i) => (
+                <div key={i} style={{
+                  display: "grid", gridTemplateColumns: "120px 1fr", gap: 12,
+                  padding: "8px 0", borderBottom: i < 10 ? "1px solid " + C.border : "none",
+                  alignItems: "start",
+                }}>
+                  <div style={{ fontFamily: "var(--fh)", fontSize: 12, fontWeight: 700, color: C.text, letterSpacing: "0.03em", paddingTop: 1 }}>{f}</div>
+                  <div style={{ fontFamily: "var(--fb)", fontSize: 12, color: C.textMid, lineHeight: 1.5 }}>{d}</div>
+                </div>
+              ))}
+            </div>
+          </Reveal>
+        </section>
+
         {/* ORIGIN */}
         <Reveal>
           <section style={{ paddingBottom: 52 }}>

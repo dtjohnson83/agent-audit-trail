@@ -103,13 +103,17 @@ export default function DashboardPage() {
   if (!authed) return <LoginGate onLogin={() => setAuthed(true)} />;
 
   return (
-    <div style={{ background: t.bg, minHeight: '100vh', maxWidth: 480, margin: '0 auto', fontFamily: 'Geist, sans-serif' }}>
+    <div style={{ background: t.bg, minHeight: '100vh', maxWidth: 1200, margin: '0 auto', fontFamily: 'Geist, sans-serif' }}>
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         @keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { display: none; }
         select option { background: ${t.surfaceSolid}; }
+        @media (min-width: 768px) {
+          .dash-layout { padding: 0 24px; }
+          .dash-card { margin-bottom: 12px; }
+        }
       `}</style>
 
       <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px 0' }}>

@@ -8,6 +8,7 @@ export function useAgents() {
   const [loading, setLoading] = useState(true)
 
   const fetch = useCallback(async () => {
+    if (!supabase) { setLoading(false); return; }
     setLoading(true)
     const { data, error } = await supabase
       .from('agents')
