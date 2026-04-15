@@ -1,0 +1,89 @@
+# Agent Audit Trail
+
+> Compliance infrastructure for agentic AI. Agent Audit Trail is a Model Context Protocol (MCP) server that provides cryptographically immutable audit logging, real-time policy enforcement, and one-click compliance reporting for AI agent workflows. Built for SMBs and regulated industries deploying AI agents who need to demonstrate compliance with Colorado SB 205, the EU AI Act, and emerging US state AI legislation.
+
+## About
+
+Agent Audit Trail is produced by DANZUS Holdings LLC. It sits between AI agents and the tools they use, recording every action in a tamper-evident SHA-256 hash chain. It is MIT licensed and distributed via npm as `agent-audit-trail`.
+
+**Who it is for:** SMBs, legal, finance, HR/staffing, insurance, accounting, healthcare, and government teams deploying AI agents under regulatory obligations.
+
+**Primary differentiator:** Unlike log aggregators or generic observability tools, every audit entry is cryptographically chained to the previous one. Any modification or deletion breaks the chain and is immediately detectable through `verify_chain`.
+
+## Core Capabilities
+
+- **Cryptographically Immutable Audit Logging** — Every agent action is recorded with full context and a SHA-256 hash linked to the previous entry. Tampering is detectable; integrity is verifiable in one call.
+- **Policy Engine** — Configurable rules evaluated in real time. Flag PII access, block high-value financial transactions, detect destructive database operations, or define custom rules.
+- **Compliance Reporting** — One-click PDF/CSV exports filtered by agent, date range, or violation type. Pre-built support for Colorado SB 205 impact assessments and EU AI Act transparency documentation. Exports include a chain integrity verification result.
+- **Agent Registry** — Track which agents are active, what they do, and their historical activity patterns.
+- **MCP Native** — Registers as a Model Context Protocol server; compatible with Claude, Claude Code, Cline, OpenClaw, and any MCP-compatible agent with no code changes.
+
+## Available MCP Tools
+
+- `log_action` — Log an agent action to the immutable audit trail.
+- `query_logs` — Search and filter audit entries.
+- `get_log_detail` — Get full details for a specific log entry.
+- `get_summary` — Dashboard-style activity summary.
+- `list_agents` — Show all registered agents.
+- `register_agent` — Explicitly register a new agent.
+- `list_policy_rules` — Show configured policy rules.
+- `add_policy_rule` — Create a new policy rule.
+- `toggle_policy_rule` — Enable or disable a rule.
+- `verify_chain` — Verify the cryptographic integrity of the audit trail.
+- `export_audit_log` — Export logs for compliance reporting (PDF/CSV).
+
+## Default Policy Rules
+
+1. **PII Field Access** (High) — Flags access to fields matching SSN, date of birth, email, phone, address, passport, driver license, or credit card patterns.
+2. **High-Value Financial Action** (High) — Flags financial actions with amounts exceeding $1,000.
+3. **Destructive Action Detection** (Critical) — Flags tool calls containing DELETE, DROP, TRUNCATE, or REMOVE operations.
+
+## How The Hash Chain Works
+
+Every log entry stores:
+- `previous_hash` — the hash of the entry before it (null for the first entry).
+- `hash` — SHA-256 of: `previous_hash + all entry fields`.
+
+This means modifying any historical entry changes its hash and breaks the chain; deleting an entry leaves the next entry pointing to a hash that no longer exists. `verify_chain` returns a definitive yes/no answer about chain integrity.
+
+## Regulatory Context
+
+- **Colorado SB 205** (effective February 2026) — Requires impact assessments and consumer notifications for AI-driven consequential decisions.
+- **EU AI Act** (high-risk enforcement August 2026) — Requires transparency, documentation, and human oversight for AI in critical sectors.
+- **Emerging US state AI legislation** — Multiple states have pending AI governance requirements.
+
+Agent Audit Trail provides the logging and reporting infrastructure required to demonstrate compliance; it does not constitute legal compliance certification.
+
+## Installation
+
+```
+npm install -g agent-audit-trail
+```
+
+Add to Claude Desktop `claude_desktop_config.json`:
+
+```
+{
+  "mcpServers": {
+    "agent-audit-trail": { "command": "agent-audit-trail" }
+  }
+}
+```
+
+Add to Claude Code:
+
+```
+claude mcp add agent-audit-trail -- npx agent-audit-trail
+```
+
+## Documentation
+
+- Homepage: https://aiagentaudit.dev/
+- Dashboard (for early-access users): https://aiagentaudit.dev/dashboard
+- Source: https://github.com/dtjohnson83/agent-audit-trail
+- npm: https://www.npmjs.com/package/agent-audit-trail
+- Publisher: DANZUS Holdings LLC — https://danzusholdings.com
+
+## License
+
+MIT

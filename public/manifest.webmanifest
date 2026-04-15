@@ -1,0 +1,26 @@
+{
+  "name": "Agent Audit Trail",
+  "short_name": "Agent Audit",
+  "description": "Compliance infrastructure for agentic AI. Immutable audit logs, policy enforcement, and compliance reports for AI agents.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0c0e",
+  "theme_color": "#0c0c0e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/dot-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["business", "productivity", "developer", "security"],
+  "lang": "en-US"
+}

@@ -243,7 +243,7 @@ export default function LandingPage() {
         <div style={{ position: "absolute", inset: 0, opacity: 0.012, mixBlendMode: "overlay", backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")" }} />
       </div>
 
-      <div style={{ position: "relative", zIndex: 1, maxWidth: 480, margin: "0 auto", padding: "0 20px" }}>
+      <main style={{ position: "relative", zIndex: 1, maxWidth: 480, margin: "0 auto", padding: "0 20px" }}>
 
         {/* NAV */}
         <nav style={{
@@ -313,7 +313,7 @@ export default function LandingPage() {
         <section style={{ paddingBottom: 52 }}>
           <Reveal delay={0}>
             <div style={{ textAlign: "center", marginBottom: 12 }}>
-              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>Interactive Demo</span>
+              <h2 style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase", margin: 0 }}>Interactive Demo</h2>
             </div>
           </Reveal>
           <MiniDashboard />
@@ -351,7 +351,7 @@ export default function LandingPage() {
         <section style={{ paddingBottom: 52 }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 18 }}>
-              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>How It Works</span>
+              <h2 style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase", margin: 0 }}>How It Works</h2>
             </div>
           </Reveal>
 
@@ -385,7 +385,7 @@ export default function LandingPage() {
         <section style={{ paddingBottom: 52 }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 16 }}>
-              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>What Gets Recorded</span>
+              <h2 style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase", margin: 0 }}>What Gets Recorded</h2>
             </div>
           </Reveal>
           <Reveal delay={0.05}>
@@ -457,7 +457,7 @@ export default function LandingPage() {
         <section style={{ paddingBottom: 52 }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 14 }}>
-              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>Built For Regulated Industries</span>
+              <h2 style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase", margin: 0 }}>Built For Regulated Industries</h2>
             </div>
           </Reveal>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, justifyContent: "center" }}>
@@ -477,7 +477,7 @@ export default function LandingPage() {
         <section style={{ paddingBottom: 52 }}>
           <Reveal>
             <div style={{ textAlign: "center", marginBottom: 18 }}>
-              <span style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>FAQ</span>
+              <h2 style={{ fontFamily: "var(--fh)", fontSize: 9, letterSpacing: "0.14em", fontWeight: 700, color: C.textDim, textTransform: "uppercase", margin: 0 }}>Frequently Asked Questions</h2>
             </div>
           </Reveal>
 
@@ -597,7 +597,7 @@ export default function LandingPage() {
           </div>
           <p style={{ fontSize: 10, color: C.textGhost, margin: 0 }}>© 2026 DANZUS Holdings LLC</p>
         </footer>
-      </div>
+      </main>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
