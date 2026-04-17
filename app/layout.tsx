@@ -2,15 +2,15 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 const SITE_URL = "https://aiagentaudit.dev";
-const SITE_NAME = "Agent Audit Trail";
+const SITE_NAME = "AgentAudit";
 const DESCRIPTION =
-  "Compliance infrastructure for agentic AI. Immutable, cryptographically chained audit logs, real-time policy enforcement, and one-click compliance reporting for AI agents. Built for Colorado SB 205, the EU AI Act, and emerging US state AI legislation.";
+  "Cryptographically immutable audit logs for AI agents. Every tool call, policy violation, and decision — recorded, chain-verified, and exportable for compliance teams.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Agent Audit Trail — AI Agent Compliance, Audit Logging & Policy Enforcement",
-    template: "%s | Agent Audit Trail",
+    default: "AI Agent Audit Logs — Compliance Infrastructure | AgentAudit",
+    template: "%s | AgentAudit",
   },
   description: DESCRIPTION,
   applicationName: SITE_NAME,
@@ -46,9 +46,9 @@ export const metadata: Metadata = {
     canonical: SITE_URL,
   },
   openGraph: {
-    title: "Agent Audit Trail — Compliance Infrastructure for Agentic AI",
+    title: "AI Agent Audit Logs — Compliance Infrastructure | AgentAudit",
     description:
-      "Know what your AI agents did. Cryptographically immutable audit logs, real-time policy enforcement, and compliance reports for regulated industries.",
+      "Cryptographically immutable audit logs for AI agents. Every tool call, policy violation, and decision — recorded, chain-verified, and exportable for compliance teams.",
     url: SITE_URL,
     siteName: SITE_NAME,
     type: "website",
@@ -64,9 +64,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Agent Audit Trail — Compliance Infrastructure for Agentic AI",
+    title: "AI Agent Audit Logs — Compliance Infrastructure | AgentAudit",
     description:
-      "Immutable audit logs, policy enforcement, and compliance reports for AI agents. Built for Colorado SB 205 and the EU AI Act.",
+      "Cryptographically immutable audit logs for AI agents. Every tool call, policy violation, and decision — recorded, chain-verified, and exportable for compliance teams.",
     images: ["/og.png"],
   },
   robots: {

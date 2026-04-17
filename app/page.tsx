@@ -595,9 +595,56 @@ export default function LandingPage() {
             </div>
             <span style={{ fontFamily: "var(--fh)", fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>Agent Audit Trail</span>
           </div>
-          <p style={{ fontSize: 10, color: C.textGhost, margin: 0 }}>© 2026 DANZUS Holdings LLC</p>
+          <p style={{ fontSize: 10, color: C.textGhost, margin: "0 0 4px" }}>© 2026 DANZUS Holdings LLC</p>
+          <p style={{ fontSize: 10, color: C.textGhost, margin: 0 }}>AgentAudit is a product of <a href="https://danzus.co" style={{ color: C.textDim, textDecoration: "underline" }}>DANZUS Holdings LLC</a></p>
         </footer>
       </main>
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "SoftwareApplication",
+            "name": "AgentAudit",
+            "description": "Cryptographically immutable audit logs for AI agents in regulated industries. Every tool call, policy violation, and decision recorded, chain-verified, and exportable for compliance teams.",
+            "url": "https://aiagentaudit.dev",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "description": "Free during early access"
+            },
+            "author": {
+              "@type": "Organization",
+              "name": "DANZUS Holdings LLC",
+              "url": "https://danzus.co"
+            }
+          })
+        }}
+      />
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "DANZUS Holdings LLC",
+            "url": "https://danzus.co",
+            "founder": {
+              "@type": "Person",
+              "name": "Dan Johnson"
+            },
+            "sameAs": [
+              "https://dimevision.app",
+              "https://aiagentaudit.dev"
+            ]
+          })
+        }}
+      />
 
       <style dangerouslySetInnerHTML={{ __html: `
         @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
