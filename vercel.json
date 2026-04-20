@@ -1,4 +1,12 @@
 {
   "version": 2,
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.aiagentaudit.dev" }],
+      "destination": "https://aiagentaudit.dev/:path*",
+      "permanent": true
+    }
+  ]
 }
