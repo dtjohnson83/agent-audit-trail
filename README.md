@@ -4,6 +4,18 @@
 
 An MCP server that provides immutable audit logging, policy enforcement, and compliance reporting for AI agent workflows. Built for SMBs deploying AI agents who need to demonstrate regulatory compliance (Colorado SB 205, EU AI Act, and emerging state AI legislation).
 
+## Employer Summary
+
+This is the strongest repo to review for AI governance, agent safety, and implementation reliability. It shows the part of AI delivery that usually gets ignored in demos: what happened, which tool was called, what data was touched, which policy fired, and whether the record can be trusted later.
+
+Proof points:
+
+- MCP server surface for agent/tool workflows
+- hash-chained audit log with integrity verification
+- configurable policy rules for PII, financial actions, and destructive operations
+- compliance-oriented export path
+- production path from local JSON to PostgreSQL/Supabase-style storage
+
 ## What It Does
 
 Agent Audit Trail sits between your AI agents and their tools, providing:
