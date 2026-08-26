@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import WebMcpProvider from "@/components/WebMcpProvider";
 
 const SITE_URL = "https://aiagentaudit.dev";
 const SITE_NAME = "AgentAudit";
@@ -236,7 +237,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body style={{ margin: 0, padding: 0 }}>{children}</body>
+      <body style={{ margin: 0, padding: 0 }}>
+        <WebMcpProvider />
+        {children}
+      </body>
     </html>
   );
 }

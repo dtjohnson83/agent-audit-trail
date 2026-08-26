@@ -72,6 +72,23 @@ claude mcp add agent-audit-trail -- npx agent-audit-trail
 | `verify_chain` | Verify the cryptographic integrity of the audit trail |
 | `export_audit_log` | Export logs for compliance reporting |
 
+## WebMCP Demo
+
+The website registers a read-only `get_audit_summary` browser tool through the
+current `document.modelContext` WebMCP API. A browser agent can retrieve aggregate
+activity without screen-scraping, and Agent Audit Trail writes a hash-chained
+record for every successful invocation with `metadata.channel` set to `webmcp`.
+
+The tool intentionally returns no individual log entries or personal data. In a
+WebMCP-enabled Chromium build, open the website and inspect the registered tools:
+
+```js
+await document.modelContext.getTools()
+```
+
+The tool calls the same-origin `/api/webmcp/summary` route, which reads only
+aggregate counts and writes the audit receipt server-side.
+
 ## Default Policy Rules
 
 Three rules are active out of the box:
